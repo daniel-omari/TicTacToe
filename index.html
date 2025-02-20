@@ -4,34 +4,46 @@
     <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tic-Tac-Toe</title>
     <link rel="stylesheet" href="styles.css">
-    <body>
-        <div class="game-container">
-            <h1>Tic-Tac-Toe</h1>
-            <p class="about">Tic-Tac-Toe is a classic game of strategy played on a 3x3 grid. The goal is to align three symbols in a row—horizontally, vertically, or diagonally.</p>
-            <div class="board">
-                <div class="row">
-                    <button class="square" id="0"></button>
-                    <button class="square" id="1"></button>
-                    <button class="square" id="2"></button>
-                </div>
-                <div class="row">
-                    <button class="square" id="3"></button>
-                    <button class="square" id="4"></button>
-                    <button class="square" id="5"></button>
-                </div>
-                <div class="row">
-                    <button class="square" id="6"></button>
-                    <button class="square" id="7"></button>
-                    <button class="square" id="8"></button>
-                </div>
+    </head>
+<body>
+    <!-- Game mode selection UI-->
+    <div id="menu-screen">
+        <h1>Tic-Tac-Toe</h1>
+        <p>Select a game mode:</p>
+        <button class="menu-button" id="ai">Play VS AI</button>
+        <button class="menu-button" id="online">Play Online</button>
+        <button class="menu-button" id="offline">Play Offline</button>
+    </div>
+
+    <!-- PVP (Offline game screen)-->
+    <div class="game-container" id="game-container" style="display: none;">
+        <h1>Tic-Tac-Toe</h1>
+        <p class="about">Tic-Tac-Toe is a classic game of strategy played on a 3x3 grid. The goal is to align three symbols in a row—horizontally, vertically, or diagonally.</p>
+        <div class="board">
+            <div class="row">
+                <button class="square" id="0"></button>
+                <button class="square" id="1"></button>
+                <button class="square" id="2"></button>
             </div>
-            <div class="game-info">
-                <p id="status">Player X's turn</p>
-                <button id="reset">Reset Game</button>
+            <div class="row">
+                <button class="square" id="3"></button>
+                <button class="square" id="4"></button>
+                <button class="square" id="5"></button>
             </div>
-            <div id="endGameMessage" style="display:none;"></div>
+            <div class="row">
+                <button class="square" id="6"></button>
+                <button class="square" id="7"></button>
+                <button class="square" id="8"></button>
+            </div>
         </div>
-    </body>
-</head>
-<script src="ticTacToe.js"></script>
+
+        <div class="game-info">
+            <p id="status">Player X's turn</p>
+            <button id="reset">Reset Game</button>
+        </div>
+        <div id="endGameMessage" style="display:none;"></div>
+    </div>
+
+    <script src="ticTacToe.js"></script>
+</body>
 </html>
