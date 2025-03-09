@@ -8,11 +8,12 @@
 <body>
     <!-- Game mode selection UI-->
     <div id="menu-screen">
-        <h1>Tic-Tac-Toe</h1>
+        <h1 id="title">Tic-Tac-Toe</h1>
         <p>Select a game mode:</p>
         <button class="menu-button" id="ai">Play VS AI</button>
         <button class="menu-button" id="online">Play Online</button>
         <button class="menu-button" id="offline">Play Offline</button>
+        <button class="menu-button" id="viewLeaderboard">Online Leaderboard</button>
     </div>
 
     <!-- AI difficulty selection-->
@@ -22,34 +23,43 @@
         <button class="menu-button" id="aiHard">Advanced</button>
     </div>
 
-    <!-- PVP (Offline game screen)-->
+    <!-- PVP and Offline game -->
     <div class="game-container" id="game-container" style="display: none;">
-        <h1>Tic-Tac-Toe</h1>
+        <h1 id="title">Tic-Tac-Toe</h1>
         <p class="about">Tic-Tac-Toe is a classic game of strategy played on a 3x3 grid. The goal is to align three symbols in a row—horizontally, vertically, or diagonally.</p>
-        <div class="board">
+        <div class="board" role="grid" aria-label="Tic-Tac-Toe board">
             <div class="row">
-                <button class="square" id="0"></button>
-                <button class="square" id="1"></button>
-                <button class="square" id="2"></button>
+                <button class="square" id="0" role="gridcell" aria-label="Empty cell" tabindex="0"></button>
+                <button class="square" id="1" role="gridcell" aria-label="Empty cell" tabindex="1"></button>
+                <button class="square" id="2" role="gridcell" aria-label="Empty cell" tabindex="2"></button>
             </div>
             <div class="row">
-                <button class="square" id="3"></button>
-                <button class="square" id="4"></button>
-                <button class="square" id="5"></button>
+                <button class="square" id="3" role="gridcell" aria-label="Empty cell" tabindex="3"></button>
+                <button class="square" id="4" role="gridcell" aria-label="Empty cell" tabindex="4"></button>
+                <button class="square" id="5" role="gridcell" aria-label="Empty cell" tabindex="5"></button>
             </div>
             <div class="row">
-                <button class="square" id="6"></button>
-                <button class="square" id="7"></button>
-                <button class="square" id="8"></button>
+                <button class="square" id="6" role="gridcell" aria-label="Empty cell" tabindex="6"></button>
+                <button class="square" id="7" role="gridcell" aria-label="Empty cell" tabindex="7"></button>
+                <button class="square" id="8" role="gridcell" aria-label="Empty cell" tabindex="8"></button>
             </div>
         </div>
 
         <div class="game-info">
+            <p id="playerIndicator"></p>
             <p id="status">Player X's turn</p>
-            <button id="reset">Reset Game</button>
+            <button id="reset" aria-label="Reset game">Reset Game</button>
         </div>
         <div id="endGameMessage" style="display:none;"></div>
     </div>
+
+    <!-- Leaderboard -->
+     <div id="leaderboard" style="display: none;">
+        <h2 id="ldTitle">Leaderboard</h2>
+        <ul id="leaderboardList" role="list" aria-live="polite"></ul>
+     </div>
+
+
     <script src="ticTacToe.js"></script>
 </body>
 </html>

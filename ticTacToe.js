@@ -2,21 +2,25 @@
 document.addEventListener("DOMContentLoaded", () => {
 
     let board = ["", "", "", "", "", "", "", "", ""]; // represents the 3x3 board
-    let currentPlayer = 'X'; // player 'X' starts first
+    let currentPlayer = 'X';
     let gameActive = true;
     let isAI = false;
     let winner = null; // keeps track of winner
     let aiDifficulty = "easy"; // default AI difficulty
+    let isOnline = false;
+    let ws = null;
+    let symbol = null;
+    let currentRoom;
 
     // Elements
     const menuScreen = document.getElementById("menu-screen");
     const gameContainer = document.getElementById("game-container");
     const offlineButton = document.getElementById("offline");
-    const onlineButton = document.getElementById("online");
     const squares = document.querySelectorAll('.square');
     const statusText = document.getElementById('status');
     const resetButton = document.getElementById('reset');
     const endGameMessage = document.getElementById("endGameMessage");
+    const leaderboard = document.getElementById("viewLeaderboard");
 
     // AI buttons
     const aiButton = document.getElementById("ai");
@@ -29,12 +33,16 @@ document.addEventListener("DOMContentLoaded", () => {
     mediumButton.addEventListener("click", () => startAIGame("medium"));
     impossibleButton.addEventListener("click", () => startAIGame("impossible"));
 
+    // Online mode buttons
+    const onlineButton = document.getElementById("online");
+    leaderboard.addEventListener("click", () => displayLeaderboard());
+    onlineButton.addEventListener("click", () => startOnlineGame());
+
+    // Colour themes for each mode
     function applyTheme(theme){
         document.body.classList.remove("offline-theme", "ai-theme", "online-theme");
         document.body.classList.add(`${theme}-theme`)
     }
-
-    // Colour themes for each mode
     document.getElementById("offline").addEventListener("click", () => applyTheme("offline"));
     document.getElementById("ai").addEventListener("click", () => applyTheme("ai"));
     document.getElementById("online").addEventListener("click", () => applyTheme("online"));
@@ -46,16 +54,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Offline PvP mode (hide UI move to PVP gamescreen)
-    offlineButton.addEventListener("click", () => { switchToGame(); resetGame();});
-    // AI mode selection
-    aiButton.addEventListener("click", () => { menuScreen.style.display = "none"; aiModeSelection.style.display = "flex";});
-
-    function startAIGame(difficulty) {
-        isAI = true;
-        aiDifficulty = difficulty;
-        switchToGame();
+    offlineButton.addEventListener("click", () => { 
+        switchToGame(); 
         resetGame();
-    }
+    });
+
+    // AI mode selection
+    aiButton.addEventListener("click", () => { 
+        menuScreen.style.display = "none"; aiModeSelection.style.display = "flex";
+    });
 
     // Function to check if there is a winner or if the game is a draw
     function checkWinner() {
@@ -68,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Check for winning combinations and detect winner
             if (board[a] && board[a] === board[b] && board[a] === board[c]) {
                 gameActive = false;
-                winner = board[a];
+                winner = board[a]; // identify the winner by their winning combination
             
                 // Highlight winning combination
                 document.getElementById(a).classList.add("winning-square");
@@ -77,34 +84,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Display winning message
                 endGameMessage.textContent = `Player ${winner} WINS!`;
-                statusText.textContent = `Player ${board[a]} wins!`;
                 endGameMessage.style.display = "block";
+                statusText.textContent = `Player ${board[a]} wins!`;
+                statusText.setAttribute("aria-live", "assertive"); // announce winner
                 return true;
             }
         }
         
         // Check if the game is a draw
-        if (!board.includes("")) {
+        if (board.every(cell => cell !== "")) {
             gameActive = false;
             statusText.textContent = "It's a draw!";
             showEndGameMessage("It's a draw!");
+            statusText.setAttribute("aria-live", "assertive");
             return true;
         }
         
         return false;
-    }
-    // Same as regular checkWinner() function but without UI as it is only for the AI move simulations
-    function checkWinnerSimulated(simulatedBoard) {
-        const winningPatterns = [[0, 1, 2], [3, 4, 5], [6, 7, 8],[0, 3, 6], [1, 4, 7], [2, 5, 8],[0, 4, 8], [2, 4, 6]];
-        
-        for (const pattern of winningPatterns) {
-            const [a, b, c] = pattern;
-            if (simulatedBoard[a] && simulatedBoard[a] === simulatedBoard[b] && simulatedBoard[a] === simulatedBoard[c]) {
-                return simulatedBoard[a];
-            }
-        }
-    
-        return null;
     }
 
     // Function to show the winner or draw message
@@ -113,24 +109,59 @@ document.addEventListener("DOMContentLoaded", () => {
         endGameMessage.style.display = 'block';
     }
 
-    // Handle a player's move
-    function makeMove(event) {
-        const index = event.target.id;
-        if (board[index] !== "" || !gameActive) return; // prevents moves after game has ended
+    function xWins() {
+        // change board theme based on who won?
+    }
+    function oWins() {
+    }
 
-        // Player's move
+    // Handle a player's move
+    function makeMove(event, index) {
+        if (board[index] !== "" || gameActive === false) {
+            return; // prevents moves after game has ended
+        }
+
+        if (isOnline === true) { 
+            onlineMove(index); 
+            return; 
+        }
+
+        // Offline mode - player's move
         board[index] = currentPlayer;
         event.target.textContent = currentPlayer;
         event.target.classList.add(currentPlayer.toLowerCase());
 
-        if (checkWinner()) return; // check for win or draw after player's move
+        event.target.setAttribute("aria-label", `Cell ${index}, ${currentPlayer}`); // announce move via aria label
+        event.target.setAttribute("aria-disabled", "true"); // prevent further interaction
+
+        if (checkWinner() === true) { // check for win or draw after player's move
+            return;
+        }
 
         currentPlayer = currentPlayer === 'X' ? 'O' : 'X'; // switch to the other player
         statusText.textContent = `Player ${currentPlayer}'s turn`;
 
-        if (isAI && currentPlayer === "O") { // AI moves only if AI mode is active and it's AI's turn
+        // Announce status update for screen readers
+        statusText.setAttribute("aria-live", "polite");
+
+        if (isAI === true && currentPlayer === "O") { // AI moves only if AI mode is active and it's AI's turn
             setTimeout(() => aiMove(board, aiDifficulty), 500); // call AI function from separate file
         }
+    }
+
+    // Accessiblity: handle keyboard input
+    function handleKeyPress(event, square, index) {
+        if (event.key === "Enter" || event.key === " ") {
+            if (square && square.textContent === "") {
+                makeMove(event, index);
+            }
+        }
+
+        // Navigate board using arrow keys
+        if (event.key === "ArrowDown" && index < 8) squares[index + 1].focus();
+        if (event.key === "ArrowUp" && index > 0) squares[index - 1].focus();
+        if (event.key === "ArrowRight" && index < 6) squares[index + 3].focus();
+        if (event.key === "ArrowLeft" && index > 2) squares[index - 3].focus();
     }
 
     // Function to reset the game
@@ -145,14 +176,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
         document.querySelector(".board").classList.remove("winner-x", "winner-o");
 
-        squares.forEach(square => {
+        squares.forEach((square, index) => {
             square.textContent = "";
             square.classList.remove("x", "o", "winning-square"); // remove x and o's from previoust game and highlight
-            square.addEventListener('click', makeMove);
+            square.setAttribute("aria-label", `Empty cell`);
+            square.removeAttribute("aria-disabled");
+            square.addEventListener("click", (event) => makeMove(event, index));
+            square.addEventListener("keydown", (event) => handleKeyPress(event, square, index));
         });
+        squares[0].focus(); // auto focus the first cell after reset
     }
 
     // AI Functions
+    function startAIGame(difficulty) {
+        isAI = true;
+        aiDifficulty = difficulty;
+        switchToGame();
+        resetGame();
+    }
+
+    // Same as regular checkWinner() function but without UI as it is only for the AI move simulations
+    function checkAiWinner(aiBoard) {
+        const winningPatterns = [[0, 1, 2], [3, 4, 5], [6, 7, 8],[0, 3, 6], [1, 4, 7], [2, 5, 8],[0, 4, 8], [2, 4, 6]];
+        
+        for (const pattern of winningPatterns) {
+            const [a, b, c] = pattern;
+            if (aiBoard[a] && aiBoard[a] === aiBoard[b] && aiBoard[a] === aiBoard[c]) {
+                return aiBoard[a];
+            }
+        }
+    
+        return null;
+    }
+
     function aiMove(board, difficulty) {
         let move;
     
@@ -172,12 +228,16 @@ document.addEventListener("DOMContentLoaded", () => {
             board[move] = "O"; // update board
             document.getElementById(move).textContent = "O"; // update UI
             document.getElementById(move).classList.add("o");
+            document.getElementById(move).setAttribute("aria-label", "AI placed O on cell " + (move + 1));
     
-            if (checkWinner()) return; // check if AI's move resulted in a win or draw
+            if (checkWinner() === true) { // check if AI's move resulted in a win or draw
+                return; 
+            }
     
             // Turn switches back to player X once AI's move has been made
             currentPlayer = "X";
             statusText.textContent = `Player ${currentPlayer}'s turn`;
+            statusText.setAttribute("aria-live", "assertive"); // announce status change
         }
     }
     
@@ -211,19 +271,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     function minimax(board, depth, isMaximizing, alpha, beta) { // Alpha-Beta pruning used to speed up AI decission making
-        let winner = checkWinnerSimulated(board);
+        let winner = checkAiWinner(board);
         if (winner === "O") return 10 - depth;
         if (winner === "X") return depth - 10;
-        if (!board.includes("")) return 0;
+        if (board.every(cell => cell !== "")) return 0;
     
         let bestScore = isMaximizing ? -Infinity : Infinity;
     
         for (let i = 0; i < board.length; i++) {
             if (board[i] === "") {
-                let simulatedBoard = [...board];
-                simulatedBoard[i] = isMaximizing ? "O" : "X";
+                let aiBoard = [...board];
+                aiBoard[i] = isMaximizing ? "O" : "X";
     
-                let score = minimax(simulatedBoard, depth + 1, !isMaximizing);
+                let score = minimax(aiBoard, depth + 1, !isMaximizing);
                 bestScore = isMaximizing ? Math.max(score, bestScore) : Math.min(score, bestScore);
 
                 // Alpha-Beta pruning (for faster AI responses)
@@ -239,7 +299,177 @@ document.addEventListener("DOMContentLoaded", () => {
         return bestScore;
     }
 
+    // Online PVP mode functions
+    function startOnlineGame() {
+        isOnline = true;
+        switchToGame();
+
+        resetButton.style.display = "none"; // reset button is not needed for this mode
+
+        statusText.setAttribute("aria-live", "polite");
+        statusText.textContent = "Searching for an opponent...";
+        gameActive = false; // disable moves until opponent connects
+
+        currentRoom = "gameRoom";
+        ws = new WebSocket("ws://localhost:3000");
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: "join", room: currentRoom }));
+        };
+
+        ws.onmessage = (event) => {
+            let data = JSON.parse(event.data);
+
+            if (data.type === "assign") { // assign a symbol to the player and notify them about it
+                symbol = data.symbol;
+                document.getElementById("playerIndicator").textContent = `You are player: ${symbol}`;
+            }
+
+            if (data.type === "start") {
+                statusText.textContent = "Game started! X plays first.";
+                statusText.setAttribute("aria-live", "polite");
+                gameActive = true;
+            }
+
+            if (data.type === "game_over") {
+                const winner = data.winner;
+
+                if (winner === "draw") {
+                    endGameMessage.innerText = "It's a draw!";
+                } 
+                else if (winner === "X" || winner === "O") {
+                    endGameMessage.innerText = `Player ${winner} WINS!`;
+                    if (winner === "X") {
+                        xWins();
+                    }
+                    else if (winner === "O") {
+                        oWins();
+                    }
+                } 
+                else {
+                    endGameMessage.innerText = "Error! something went wrong with the winner function!"; // throw error and indicate which function
+                }
+
+                endGameMessage.style.display = "block";
+                statusText.textContent = `Player ${winner} WINS!`;
+                statusText.setAttribute("aria-live", "polite");
+
+                // Highlight the winning combination
+                data.winning_combination.forEach(index => {
+                    document.getElementById(index).classList.add("winning-square");
+                    document.getElementById(index).setAttribute("aria-label", `Winning move: Cell ${index + 1}`);
+                });
+
+                gameActive = false;
+            }
+
+            if (data.type === "waiting") {
+                statusText.textContent = "Searching for an opponent...";
+            }
+
+            if (data.type === "update") {
+                updateOnlineBoard(data.board);
+                currentPlayer = data.turn;
+                board = data.board;
+                
+                data.board.forEach((square, index) => {
+                    const squareElement = document.getElementById(index);
+                    squareElement.textContent = square || "";
+                    squareElement.setAttribute("aria-label", `Cell ${index + 1}, ${square || 'empty'}`);
+                    squareElement.classList.remove("x", "o");
+                    if (square) {
+                        squareElement.classList.add(square.toLowerCase());
+                    }
+                });
+
+                statusText.textContent = `Player ${currentPlayer}'s turn`;
+                statusText.setAttribute("aria-live", "polite");
+            }
+
+            if (data.type === "full") {
+                endGameMessage.innerText = `Room is currently full!`;
+                endGameMessage.style.display = "block";
+                statusText.textContent = "Room is full!";
+                statusText.setAttribute("aria-live", "polite");
+            }
+
+            if (data.type === "opponent_left") {
+                statusText.textContent = "Opponent disconnected. Waiting for reconnection...";
+                statusText.setAttribute("aria-live", "polite");
+                gameActive = false; // disable moves in the meanwhile
+            }
+        };
+    }
+
+    function onlineMove(index) {
+        if (isOnline !== true || !symbol || currentPlayer !== symbol || gameActive !== true) {
+            return;
+        }
+        if (board[index] !== "") { 
+            return;
+        }
+
+        // Make the move
+        board[index] = symbol;
+        document.getElementById(index).textContent = symbol;
+        document.getElementById(index).classList.add(symbol.toLowerCase());
+
+        // Send move to server
+        ws.send(JSON.stringify({ type: "move", room: currentRoom, index: index, symbol: symbol }));
+    }
+
+    function updateOnlineBoard(boardState) {
+        board = boardState;
+        for (let i = 0; i < 9; i++) {
+            document.getElementById(i).textContent = board[i] || "";
+        }
+    }
+
+    // Leaderboard function
+    function displayLeaderboard() {
+
+        document.getElementById("menu-screen").style.display = "none"; // hide all other elements
+        document.getElementById("leaderboard").style.display = "block"; // show the hidden leaderboard
+
+        // Make leaderboard focusable and focus on it
+        const leaderboardContainer = document.getElementById("leaderboard");
+        leaderboardContainer.setAttribute("tabindex", "-1");
+        leaderboardContainer.focus();
+
+        // Fetch the leaderboard data from the server
+        fetch('http://localhost:3000/leaderboard')
+        .then(response => response.json())
+        .then(data => {
+            const leaderboardList = document.getElementById("leaderboardList");
+            leaderboardList.innerHTML = '';  // Clear previous leaderboard data
+            
+            if (data.length === 0) {
+                leaderboardList.innerHTML = '<li>No data available</li>';
+                leaderboardList.setAttribute("aria-live", "polite");
+            }
+        
+            // Populate the leaderboard with data from the server
+            data.forEach(player => {
+                const listItem = document.createElement('li');
+                listItem.textContent = `${player.winner}: ${player.wins} wins`; // Display the player and win count
+                listItem.setAttribute("role", "listitem");
+                leaderboardList.appendChild(listItem);
+            });
+            leaderboardList.setAttribute("aria-live", "polite");
+        })
+        .catch(error => {
+            console.error('Error fetching leaderboard:', error);
+            const leaderboardList = document.getElementById("leaderboardList");
+            leaderboardList.innerHTML = '<li>Failed to load leaderboard data.</li>';
+            leaderboardList.setAttribute("aria-live", "polite");
+        });
+    }
+
     // Event listeners
-    squares.forEach(square => square.addEventListener('click', makeMove));
+    squares.forEach((square, index) => {
+        square.addEventListener("click", (event) => makeMove(event, index));
+        square.addEventListener("keydown", (event) => handleKeyPress(event, square, index));
+    });
+
     resetButton.addEventListener('click', resetGame);
 });

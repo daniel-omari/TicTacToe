@@ -6,7 +6,7 @@ body {
     font-family: Arial, sans-serif;
     background-color: #f0f0f0;
 
-    font-size: 1rem; /* adjusts text better for phones and tablets */
+    font-size: 1rem;
 }
 
 /* Initial UI */
@@ -68,22 +68,41 @@ body {
 #online {
     background: linear-gradient(135deg, #33B5E5, #0099CC);
 }
+#viewLeaderboard {
+    background: linear-gradient(135deg, #7733e5, #4e00cc);
+}
 .menu-button:hover {
     transform: scale(1.1);
     filter: brightness(1.2);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
+/* Theme colours */
 .offline-theme .game-container {
-    border-color: #007E33;
+    box-shadow: 0 0 20px #007E33;
+}
+.offline-theme .about,
+.offline-theme #playerIndicator,
+.offline-theme #status {
+    text-shadow: 1px 1px 2px white, 0 0 3px greenyellow, 0 0 2px green;
 }
 .offline-theme .square {
     border-color: black
 }
-.ai-theme .game-container {
+.ai-theme .game-container{
     box-shadow: 0 0 20px rgba(255, 140, 0, 0.5);
+}
+.ai-theme .about,
+.ai-theme #playerIndicator,
+.ai-theme #status {
+    text-shadow: 1px 1px 2px white, 0 0 3px orange, 0 0 2px darkorange;
 }
 .online-theme .game-container {
     box-shadow: 0 0 20px rgba(51, 181, 229, 0.5);
+}
+.online-theme .about, 
+.online-theme #playerIndicator,
+.online-theme #status {
+    text-shadow: 1px 1px 2px white, 0 0 3px deepskyblue, 0 0 2px dodgerblue;
 }
 
 /* Game */
@@ -108,6 +127,45 @@ body {
 .about{
     text-shadow: 1px 1px 2px white, 0 0 3px greenyellow, 0 0 2px green;
     margin-bottom: 20px;
+}
+
+#title {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: black;
+    text-align: center;
+    position: relative;
+}
+#title::before {
+    content: "Tic-Tac-Toe"; /* make 2nd overlay of the board */
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: -1; /* push glow layer behind the text */
+    color: transparent; /* make 2nd text overlay invisible */
+    background: linear-gradient(45deg, #00ff99, #00ccff, #ff66cc, #ffcc00);
+    filter: blur(10px);
+    opacity: 0.6;
+}
+#ldTitle {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: black;
+    text-align: center;
+    position: relative;
+}
+#ldTitle::before {
+    content: "Tic-Tac-Toe"; /* make 2nd overlay of the board */
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: -1; /* push glow layer behind the text */
+    color: transparent; /* make 2nd text overlay invisible */
+    background: linear-gradient(45deg, #00ff99, #00ccff, #ff66cc, #ffcc00);
+    filter: blur(10px);
+    opacity: 0.6;
 }
 
 .board{
@@ -177,6 +235,18 @@ body {
     text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
     font-weight: bold;
     animation: pop-in 0.2s ease-out;
+}
+
+#status{
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+#playerIndicator {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
 }
 
 /* winning effects */
@@ -252,6 +322,11 @@ body {
     }
 }
 
+/* Accessibility features */
+.square:focus {
+    outline: 3px solid #ffcc00; /* Add visible focus for keyboard users */
+}
+
 /* Mobile Styles (up to 600px wide) */
 /* 
     Checklist:
@@ -262,24 +337,42 @@ body {
 */
 @media (max-width: 600px) {
     .game-container {
-        width: 100%;
-        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 90%;
+        max-width: 400px;
+        height: auto;
+        padding: 15px;
     }
 
     .board {
-        grid-template-columns: repeat(3, 1fr);
-        width: 100%;
+        grid-template-columns: repeat(3, minmax(60px, 1fr));
+        max-width: 320px;
     }
 
     .square {
-        height: 100px;
-        width: 100px;
-        font-size: 24px;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+        font-size: 1.5rem;
+    }
+
+    #title, #ldTitle {
+        font-size: 1.8rem
+    }
+
+    .menu-button {
+        width: 90%;
+        padding: 10px;
+        font-size: 16;
     }
 
     #reset {
         font-size: 16px;
         padding: 8px 16px;
+        color: white;
+        background-color: #ff0000; /* no hover effect for phones (just solid red button) */
     }
 
     .about {
@@ -290,6 +383,24 @@ body {
         font-size: 24px;
         text-align: center;
         margin: 0 10px;
+    }
+
+    .square.x {
+        font-size: 55px;
+        color: #ff4d4d;
+        text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
+        font-weight: bold;
+        animation: pop-in 0.2s ease-out;
+    }
+    .square.o {
+        font-size: 55px;
+        color: #3399ff;
+        text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
+        font-weight: bold;
+        animation: pop-in 0.2s ease-out;
+    }
+    #aiEasy, #aiMedium, #aiHard {
+        padding: 10px 10px;
     }
 }
 
@@ -302,28 +413,67 @@ body {
 */
 @media (max-width: 1024px) and (min-width: 601px) {
     .game-container {
-        width: 80%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        max-width: 600px;
+        height: auto;
         padding: 15px;
     }
 
     .board {
-        grid-template-columns: repeat(3, 1fr);
-        width: 100%;
+        grid-template-columns: repeat(3, minmax(60px, 1fr));
+        max-width: 550px;
     }
 
     .square {
-        height: 120px;
-        width: 120px;
-        font-size: 30px;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+        font-size: 1.5rem;
+    }
+
+    #title, #ldTitle {
+        font-size: 1.8rem
+    }
+
+    .menu-button {
+        width: 90%;
+        padding: 10px;
+        font-size: 16;
     }
 
     #reset {
-        font-size: 18px;
-        padding: 10px 20px;
+        font-size: 16px;
+        padding: 8px 16px;
+        color: white;
+        background-color: #ff0000;
     }
 
     .about {
-        font-size: 16px;
+        font-size: 14px;
+    }
+
+    #endGameMessage {
+        font-size: 24px;
+        text-align: center;
+        margin: 0 10px;
+    }
+
+    .square.x {
+        font-size: 55px;
+        color: #ff4d4d;
+        text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
+        font-weight: bold;
+        animation: pop-in 0.2s ease-out;
+    }
+    .square.o {
+        font-size: 55px;
+        color: #3399ff;
+        text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
+        font-weight: bold;
+        animation: pop-in 0.2s ease-out;
     }
 }
 
