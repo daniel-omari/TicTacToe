@@ -327,14 +327,7 @@ body {
     outline: 3px solid #ffcc00; /* Add visible focus for keyboard users */
 }
 
-/* Mobile Styles (up to 600px wide) */
-/* 
-    Checklist:
-    1) Smaller gameboard + elements
-    2) Smaller padding sizes
-    3) Smaller font sizes for "X"s "O"s and endgame message
-    4) Smaller description and smaller reset button
-*/
+/* Mobile styles (up to 600px wide): smaller board, padding, fonts and buttons. */
 @media (max-width: 600px) {
     .game-container {
         display: flex;
@@ -404,13 +397,7 @@ body {
     }
 }
 
-/* Tablet Styles (600px to 1024px wide) */
-/* 
-    Checklist:
-    1) Smaller gameboard + elements
-    2) Smaller texts but stil bigger than mobile
-    3) Game area doesn't need to fill entire screen
-*/
+/* Tablet styles (601px to 1024px wide): scaled-down board that need not fill the screen. */
 @media (max-width: 1024px) and (min-width: 601px) {
     .game-container {
         display: flex;

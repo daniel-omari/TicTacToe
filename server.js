@@ -16,7 +16,7 @@ app.use(cors());
 
 // DATABASE INTEGRATION
 // Initialize SQLite database
-db = new sqlite3.Database('tic_tac_toe.db', (err) => {
+const db = new sqlite3.Database('tic_tac_toe.db', (err) => {
     console.log("Connected to SQLite database.");
     db.run(`CREATE TABLE IF NOT EXISTS game_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

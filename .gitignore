@@ -1,0 +1,19 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# SQLite database (generated at runtime by the server)
+*.db
+*.db-journal
+
+# Env / local config
+.env
+
+# Editor / IDE
+.idea/
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentPlayer = 'X';
     let gameActive = true;
     let isAI = false;
-    let winner = null; // keeps track of winner
+    let winner = null;
     let aiDifficulty = "easy"; // default AI difficulty
     let isOnline = false;
     let ws = null;
@@ -109,12 +109,6 @@ document.addEventListener("DOMContentLoaded", () => {
         endGameMessage.style.display = 'block';
     }
 
-    function xWins() {
-        // change board theme based on who won?
-    }
-    function oWins() {
-    }
-
     // Handle a player's move
     function makeMove(event, index) {
         if (board[index] !== "" || gameActive === false) {
@@ -149,7 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Accessiblity: handle keyboard input
+    // Accessibility: handle keyboard input
     function handleKeyPress(event, square, index) {
         if (event.key === "Enter" || event.key === " ") {
             if (square && square.textContent === "") {
@@ -178,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         squares.forEach((square, index) => {
             square.textContent = "";
-            square.classList.remove("x", "o", "winning-square"); // remove x and o's from previoust game and highlight
+            square.classList.remove("x", "o", "winning-square"); // clear marks and highlight from the previous game
             square.setAttribute("aria-label", `Empty cell`);
             square.removeAttribute("aria-disabled");
             square.addEventListener("click", (event) => makeMove(event, index));
@@ -241,24 +235,24 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     
-    function easyAIMove(board) { // pretty much moves randomly
+    function easyAIMove(board) { // picks a random empty cell
         const available = board.map((val, i) => (val === "" ? i : null)).filter(val => val !== null);
         return available.length ? available[Math.floor(Math.random() * available.length)] : -1;
     }
     
-    function mediumAIMove(board) { // %70 accuracy
+    function mediumAIMove(board) { // plays the optimal move ~70% of the time, otherwise random
         if (Math.random() < 0.7) return impossibleAIMove(board);
         return easyAIMove(board);
     }
     
-    function impossibleAIMove(board) { // almost unbeatable
+    function impossibleAIMove(board) { // full minimax search, effectively unbeatable
         let bestMove = -1;
         let bestScore = -Infinity;
     
         for (let i = 0; i < board.length; i++) {
             if (board[i] === "") {
                 board[i] = "O";
-                let score = minimax(board, 0, false);
+                let score = minimax(board, 0, false, -Infinity, Infinity);
                 board[i] = "";
     
                 if (score > bestScore) {
@@ -270,7 +264,8 @@ document.addEventListener("DOMContentLoaded", () => {
         return bestMove;
     }
     
-    function minimax(board, depth, isMaximizing, alpha, beta) { // Alpha-Beta pruning used to speed up AI decission making
+    // Minimax with alpha-beta pruning to speed up the AI's decision making.
+    function minimax(board, depth, isMaximizing, alpha, beta) {
         let winner = checkAiWinner(board);
         if (winner === "O") return 10 - depth;
         if (winner === "X") return depth - 10;
@@ -283,7 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 let aiBoard = [...board];
                 aiBoard[i] = isMaximizing ? "O" : "X";
     
-                let score = minimax(aiBoard, depth + 1, !isMaximizing);
+                let score = minimax(aiBoard, depth + 1, !isMaximizing, alpha, beta);
                 bestScore = isMaximizing ? Math.max(score, bestScore) : Math.min(score, bestScore);
 
                 // Alpha-Beta pruning (for faster AI responses)
@@ -339,15 +334,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 } 
                 else if (winner === "X" || winner === "O") {
                     endGameMessage.innerText = `Player ${winner} WINS!`;
-                    if (winner === "X") {
-                        xWins();
-                    }
-                    else if (winner === "O") {
-                        oWins();
-                    }
                 } 
                 else {
-                    endGameMessage.innerText = "Error! something went wrong with the winner function!"; // throw error and indicate which function
+                    endGameMessage.innerText = "Something went wrong determining the winner.";
                 }
 
                 endGameMessage.style.display = "block";
