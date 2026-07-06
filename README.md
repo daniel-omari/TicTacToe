@@ -36,7 +36,9 @@ cuts the search work without changing the result.
 
 The Node server (`server.js`) runs a WebSocket endpoint and a small HTTP API. Players are
 matched into a room; the server holds the authoritative board, validates each move
-(correct turn, legal cell), broadcasts updates to both clients, and detects wins and draws
+(correct turn, legal cell, and the sender's own server-assigned symbol and room, so a
+tampered client cannot move for its opponent), broadcasts updates to both clients, and
+detects wins and draws
 on its own rather than trusting the browser. Validating moves server-side keeps the two
 clients in sync and stops a tampered client from making illegal moves. Every finished game
 is written to a SQLite table, and the `/leaderboard` endpoint aggregates those rows into a

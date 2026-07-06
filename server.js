@@ -55,6 +55,7 @@ function checkOnlineWinner(board) {
     return null; // No winner yet
 }
 
+// Add the connecting socket to a room and assign it a symbol (X joins first).
 function handleJoin(ws, data) {
     // Validate the room id and refuse a second join from the same socket.
     if (typeof data.room !== 'string' || !ROOM_ID_PATTERN.test(data.room) || ws.room) {
@@ -90,6 +91,7 @@ function handleJoin(ws, data) {
     });
 }
 
+// Apply one validated move, then broadcast the new state or the game result.
 function handleMove(ws, data) {
     // The move is only trusted for the room and symbol the SERVER assigned to
     // this connection - never the ones claimed in the message - so a client
