@@ -194,8 +194,10 @@ body {
     z-index: -1;
 }
 
+/* Row wrappers exist for screen readers only; display: contents lets the
+   nine cells flow straight into the board grid in reading order. */
 .row {
-  display: table-row
+  display: contents;
 }
 
 .square {

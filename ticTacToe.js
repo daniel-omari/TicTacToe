@@ -156,11 +156,18 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
+        // TODO(Daniel): arrow keys now need to match the board's reading order:
+        //   0 1 2
+        //   3 4 5
+        //   6 7 8
+        // Left/Right move by 1, Up/Down move by 3, and focus must NOT wrap
+        // around an edge (e.g. Right on cell 2 stays on 2, Down on 7 stays on 7).
+        // Hint: index % 3 is the column (0-2), Math.floor(index / 3) is the row.
         // Navigate board using arrow keys
-        if (event.key === "ArrowDown" && index < 8) squares[index + 1].focus();
-        if (event.key === "ArrowUp" && index > 0) squares[index - 1].focus();
-        if (event.key === "ArrowRight" && index < 6) squares[index + 3].focus();
-        if (event.key === "ArrowLeft" && index > 2) squares[index - 3].focus();
+        if (event.key === "ArrowDown" && index < 6) squares[index + 3].focus();
+        if (event.key === "ArrowUp" && index > 2) squares[index - 3].focus();
+        if (event.key === "ArrowRight" && index % 3 !== 2) squares[index + 1].focus();
+        if (event.key === "ArrowLeft" && index % 3 !== 0) squares[index - 1].focus();
     }
 
     // Function to reset the game
