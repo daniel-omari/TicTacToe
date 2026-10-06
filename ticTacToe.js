@@ -115,6 +115,11 @@ document.addEventListener("DOMContentLoaded", () => {
             return; // prevents moves after game has ended
         }
 
+        // Ignore clicks while the AI is thinking
+        if (isAI === true && currentPlayer === "O") {
+            return;
+        }
+
         if (isOnline === true) { 
             onlineMove(index); 
             return; 
