@@ -4,10 +4,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let board = ["", "", "", "", "", "", "", "", ""]; // represents the 3x3 board
     let currentPlayer = 'X';
     let gameActive = true;
-    let isAI = false;
+    let mode = null; // "offline", "ai" or "online" (null = still on the menu)
     let winner = null;
     let aiDifficulty = "easy"; // default AI difficulty
-    let isOnline = false;
     let ws = null;
     let symbol = null;
     let currentRoom;
@@ -54,7 +53,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Offline PvP mode (hide UI move to PVP gamescreen)
-    offlineButton.addEventListener("click", () => { 
+    offlineButton.addEventListener("click", () => {
+        mode = "offline";
         switchToGame(); 
         resetGame();
     });
@@ -116,11 +116,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Ignore clicks while the AI is thinking
-        if (isAI === true && currentPlayer === "O") {
+        if (mode === "ai" && currentPlayer === "O") {
             return;
         }
 
-        if (isOnline === true) { 
+        if (mode === "online") { 
             onlineMove(index); 
             return; 
         }
@@ -143,7 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Announce status update for screen readers
         statusText.setAttribute("aria-live", "polite");
 
-        if (isAI === true && currentPlayer === "O") { // AI moves only if AI mode is active and it's AI's turn
+        if (mode === "ai" && currentPlayer === "O") { // AI moves only if AI mode is active and it's AI's turn
             setTimeout(() => aiMove(board, aiDifficulty), 500); // call AI function from separate file
         }
     }
@@ -188,7 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // AI Functions
     function startAIGame(difficulty) {
-        isAI = true;
+        mode = "ai";
         aiDifficulty = difficulty;
         switchToGame();
         resetGame();
@@ -301,7 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Online PVP mode functions
     function startOnlineGame() {
-        isOnline = true;
+        mode = "online";
         switchToGame();
 
         resetButton.style.display = "none"; // reset button is not needed for this mode
@@ -387,7 +387,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function onlineMove(index) {
-        if (isOnline !== true || !symbol || currentPlayer !== symbol || gameActive !== true) {
+        if (mode !== "online" || !symbol || currentPlayer !== symbol || gameActive !== true) {
             return;
         }
         if (board[index] !== "") { 
