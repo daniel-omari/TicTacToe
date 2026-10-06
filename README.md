@@ -62,7 +62,8 @@ Accessibility was a first-class goal rather than an afterthought:
 - Vanilla HTML, CSS and JavaScript on the frontend, no frameworks.
 - Node.js with Express for the HTTP API.
 - `ws` for the WebSocket server that drives online play.
-- SQLite (via `sqlite3`) for storing game results and the leaderboard.
+- SQLite through Node's built-in `node:sqlite` module for game results and the leaderboard
+  (no native add-on to compile).
 - Responsive CSS with media queries for mobile and tablet layouts.
 
 ## Project structure
@@ -78,10 +79,10 @@ Accessibility was a first-class goal rather than an afterthought:
 
 Local and versus-AI play need no server: just open `index.html` in a browser.
 
-For online multiplayer and the leaderboard, start the server:
+For online multiplayer and the leaderboard, start the server (needs Node.js 22.13 or newer):
 
 ```bash
-npm install     # installs express, ws, sqlite3, cors
+npm install     # installs express, ws and cors
 npm start       # starts the server on port 3000
 ```
 

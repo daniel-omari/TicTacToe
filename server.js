@@ -1,9 +1,9 @@
-// npm install ws express sqlite3 cors
-// node server.js
+// npm install
+// npm start
 
 const WebSocket = require('ws');
 const http = require('http');
-const sqlite3 = require('sqlite3').verbose();
+const { DatabaseSync } = require('node:sqlite');
 
 const express = require('express');
 const app = express();
@@ -14,16 +14,17 @@ const wss = new WebSocket.Server({ server });
 const cors = require('cors');
 app.use(cors());
 
-// DATABASE INTEGRATION
-// Initialize SQLite database
-const db = new sqlite3.Database('tic_tac_toe.db', (err) => {
-    console.log("Connected to SQLite database.");
-    db.run(`CREATE TABLE IF NOT EXISTS game_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        winner TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-});
+// Game results live in SQLite via Node's built-in driver (no native add-on to build).
+const db = new DatabaseSync('tic_tac_toe.db');
+db.exec(`CREATE TABLE IF NOT EXISTS game_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    winner TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+const insertResult = db.prepare("INSERT INTO game_results (winner) VALUES (?)");
+const selectLeaderboard = db.prepare(
+    "SELECT winner, COUNT(*) AS wins FROM game_results GROUP BY winner ORDER BY wins DESC"
+);
 
 const rooms = {};
 
@@ -116,13 +117,11 @@ function handleMove(ws, data) {
         const { winner, winningCombination } = result;
 
         // Store the result in the database
-        db.run("INSERT INTO game_results (winner) VALUES (?)", [winner], (err) => {
-            if (err) {
-                console.error("Error saving game result:", err.message);
-            } else {
-                console.log(`Game result saved: ${winner}`);
-            }
-        });
+        try {
+            insertResult.run(winner);
+        } catch (err) {
+            console.error("Error saving game result:", err.message);
+        }
 
         // Send the final board first, then the result, so the result message
         // is the last thing each client renders.
@@ -190,14 +189,14 @@ wss.on('connection', (ws) => {
     });
 });
 
-app.get('/leaderboard', (req, res) => { // display leaderboard
-    db.all("SELECT winner, COUNT(*) as wins FROM game_results GROUP BY winner ORDER BY wins DESC;", (err, rows) => {
-        if (err) {
-            res.status(500).json({ error: err.message });
-        } else {
-            res.json(rows);
-        }
-    });
+// Win tally per symbol (X, O and draws).
+app.get('/leaderboard', (req, res) => {
+    try {
+        res.json(selectLeaderboard.all());
+    } catch (err) {
+        console.error("Error reading leaderboard:", err.message);
+        res.status(500).json({ error: "Could not load the leaderboard" });
+    }
 });
 
 server.listen(3000, () => console.log('Server running on port 3000'));
