@@ -327,20 +327,9 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             if (data.type === "game_over") {
-                const winner = data.winner;
-
-                if (winner === "draw") {
-                    endGameMessage.innerText = "It's a draw!";
-                } 
-                else if (winner === "X" || winner === "O") {
-                    endGameMessage.innerText = `Player ${winner} WINS!`;
-                } 
-                else {
-                    endGameMessage.innerText = "Something went wrong determining the winner.";
-                }
-
-                endGameMessage.style.display = "block";
-                statusText.textContent = `Player ${winner} WINS!`;
+                const message = data.winner === "draw" ? "It's a draw!" : `Player ${data.winner} wins!`;
+                showEndGameMessage(message);
+                statusText.textContent = message;
                 statusText.setAttribute("aria-live", "polite");
 
                 // Highlight the winning combination
@@ -371,8 +360,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 });
 
-                statusText.textContent = `Player ${currentPlayer}'s turn`;
-                statusText.setAttribute("aria-live", "polite");
+                if (data.turn) { // turn is null once the game is over
+                    statusText.textContent = `Player ${currentPlayer}'s turn`;
+                    statusText.setAttribute("aria-live", "polite");
+                }
             }
 
             if (data.type === "full") {

@@ -124,21 +124,14 @@ function handleMove(ws, data) {
             }
         });
 
-        // Inform both players of the game result
+        // Send the final board first, then the result, so the result message
+        // is the last thing each client renders.
         room.players.forEach((player) => {
+            safeSend(player, { type: "update", board: room.board, turn: null });
             safeSend(player, {
                 type: "game_over",
                 winner: winner,
                 winning_combination: winningCombination
-            });
-        });
-
-        // Notify both players with the updated board and turn (game over)
-        room.players.forEach((player) => {
-            safeSend(player, {
-                type: "update",
-                board: room.board,
-                turn: null  // game over, no more turns
             });
         });
 
