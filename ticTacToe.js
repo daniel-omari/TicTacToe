@@ -180,8 +180,6 @@ document.addEventListener("DOMContentLoaded", () => {
             square.classList.remove("x", "o", "winning-square"); // clear marks and highlight from the previous game
             square.setAttribute("aria-label", `Empty cell`);
             square.removeAttribute("aria-disabled");
-            square.addEventListener("click", (event) => makeMove(event, index));
-            square.addEventListener("keydown", (event) => handleKeyPress(event, square, index));
         });
         squares[0].focus(); // auto focus the first cell after reset
     }
