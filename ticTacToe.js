@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let mode = null; // "offline", "ai" or "online" (null = still on the menu)
     let winner = null;
     let aiDifficulty = "easy"; // default AI difficulty
+    let aiTimer = null; // pending AI move, so a reset or leaving the game can cancel it
     let ws = null;
     let symbol = null;
     let currentRoom;
@@ -18,6 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const squares = document.querySelectorAll('.square');
     const statusText = document.getElementById('status');
     const resetButton = document.getElementById('reset');
+    const menuButton = document.getElementById('menu');
+    const playerIndicator = document.getElementById("playerIndicator");
     const endGameMessage = document.getElementById("endGameMessage");
     const leaderboard = document.getElementById("viewLeaderboard");
 
@@ -40,7 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Colour themes for each mode
     function applyTheme(theme){
         document.body.classList.remove("offline-theme", "ai-theme", "online-theme");
-        document.body.classList.add(`${theme}-theme`)
+        if (theme) document.body.classList.add(`${theme}-theme`); // null = plain menu look
     }
     document.getElementById("offline").addEventListener("click", () => applyTheme("offline"));
     document.getElementById("ai").addEventListener("click", () => applyTheme("ai"));
@@ -144,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
         statusText.setAttribute("aria-live", "polite");
 
         if (mode === "ai" && currentPlayer === "O") { // AI moves only if AI mode is active and it's AI's turn
-            setTimeout(() => aiMove(board, aiDifficulty), 500); // call AI function from separate file
+            aiTimer = setTimeout(() => aiMove(board, aiDifficulty), 500); // short pause so the AI feels like it's thinking
         }
     }
 
@@ -165,6 +168,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Function to reset the game
     function resetGame() {
+        clearTimeout(aiTimer); // drop an AI move still waiting from the previous game
 
         board = ["", "", "", "", "", "", "", "", ""];
         winner = null;
@@ -182,6 +186,26 @@ document.addEventListener("DOMContentLoaded", () => {
             square.removeAttribute("aria-disabled");
         });
         squares[0].focus(); // auto focus the first cell after reset
+    }
+
+    // Leave the current game and go back to the main menu, clearing all mode state
+    function returnToMenu() {
+        if (ws) { // leaving an online game: stop listening, and closing tells the server we left
+            ws.onmessage = null;
+            ws.close();
+            ws = null;
+            symbol = null;
+        }
+
+        mode = null;
+        resetGame(); // also cancels a pending AI move
+        playerIndicator.textContent = "";
+        resetButton.style.display = ""; // online mode hides it
+        applyTheme(null);
+
+        gameContainer.style.display = "none";
+        menuScreen.style.display = ""; // back to its stylesheet layout
+        aiButton.focus();
     }
 
     // AI Functions
@@ -320,7 +344,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (data.type === "assign") { // assign a symbol to the player and notify them about it
                 symbol = data.symbol;
-                document.getElementById("playerIndicator").textContent = `You are player: ${symbol}`;
+                playerIndicator.textContent = `You are player: ${symbol}`;
             }
 
             if (data.type === "start") {
@@ -455,4 +479,5 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     resetButton.addEventListener('click', resetGame);
+    menuButton.addEventListener('click', returnToMenu);
 });
