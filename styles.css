@@ -1,468 +1,369 @@
-/* Default styles for desktop */
-body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-family: Arial, sans-serif;
-    background-color: #f0f0f0;
+/* Tic-Tac-Toe styles.
+   Everything is sized fluidly (clamp / min / viewport units) so the layout scales
+   smoothly between phone, tablet and desktop instead of jumping at breakpoints. */
 
-    font-size: 1rem;
+*, *::before, *::after {
+    box-sizing: border-box;
 }
 
-/* Initial UI */
-#menu-screen {
-    text-align: center;
-    margin-top: 50px;
+:root {
+    /* One board cell: as big as the window allows, between 64px and 150px.
+       The height term leaves room for the title, text and buttons around the board. */
+    --cell: clamp(64px, min(26vw, calc((100vh - 420px) / 3)), 150px);
+    --gap: clamp(6px, 1.5vw, 10px);
+}
+@supports (height: 100dvh) {
+    /* dvh ignores the mobile browser's collapsing address bar */
+    :root { --cell: clamp(64px, min(26vw, calc((100dvh - 420px) / 3)), 150px); }
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    padding: clamp(12px, 3vw, 32px);
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+}
+@supports (min-height: 100dvh) {
+    body { min-height: 100dvh; }
+}
+
+/* ---------- Screens ---------- */
+/* margin: auto centres the visible screen both ways, and still lets the page
+   scroll normally if a screen is ever taller than the window. */
+#menu-screen,
+#ai-mode-selection,
+#leaderboard,
+.game-container {
+    margin: auto;
+    isolation: isolate; /* keeps the title/board glow layers inside the card */
+}
+
+/* The three menu-style screens share one card layout */
+#menu-screen,
+#ai-mode-selection,
+#leaderboard {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: clamp(10px, 2vh, 16px);
+    width: min(480px, 100%);
+    padding: clamp(20px, 5vw, 40px);
+    text-align: center;
+    background: rgba(255, 255, 255, 0.75);
+    border-radius: 24px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
 }
+
+.glow-title {
+    position: relative;
+    margin: 0 0 4px;
+    font-size: clamp(1.8rem, 6vw, 2.5rem);
+    font-weight: bold;
+    color: black;
+}
+.glow-title::before { /* blurred colour glow sitting behind the title text */
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    color: transparent;
+    background: linear-gradient(45deg, #00ff99, #00ccff, #ff66cc, #ffcc00);
+    filter: blur(10px);
+    opacity: 0.6;
+}
+
+.screen-subtitle {
+    margin: 0;
+    font-size: clamp(15px, 2.5vw, 18px);
+    color: #333;
+}
+
+/* ---------- Menu buttons ---------- */
 .menu-button {
     display: block;
-    width: 220px;
-    padding: 15px;
-    margin: 10px auto;
-    font-size: 22px;
+    width: 100%;
+    padding: clamp(12px, 2.2vh, 20px) 16px;
+    font-size: clamp(16px, 4vw, 24px);
     font-weight: bold;
-    border-radius: 12px;
-    border: none;
-    cursor: pointer;
-    transition: all 0.3s ease-in-out;
     color: white;
     text-transform: uppercase;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-#ai { /* Colourful buttons & game themes :) */
-    
-    background: linear-gradient(135deg, #FFD700, #FF8C00);
-}
-#aiEasy, #aiMedium, #aiHard {
-    background: linear-gradient(135deg, #FFD700, #FF8C00);
     border: none;
-    padding: 10px 20px;
+    border-radius: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+.menu-button .hint { /* short description under each difficulty */
+    display: block;
+    margin-top: 4px;
+    font-size: 0.6em;
+    font-weight: normal;
+    text-transform: none;
+    opacity: 0.9;
+}
+
+#ai { background: linear-gradient(135deg, #FFD700, #FF8C00); }
+#online, #aiMedium { background: linear-gradient(135deg, #33B5E5, #0099CC); }
+#offline, #aiEasy { background: linear-gradient(135deg, #00C851, #007E33); }
+#viewLeaderboard { background: linear-gradient(135deg, #7733e5, #4e00cc); }
+#aiHard { background: linear-gradient(135deg, #FF4081, #D50000); }
+
+/* The difficulty options are the main event on their screen, so make them taller */
+#ai-mode-selection .menu-button {
+    padding-block: clamp(16px, 3vh, 24px);
+}
+
+.back-button {
+    margin-top: 6px;
+    padding: 10px 28px;
     font-size: 16px;
     font-weight: bold;
-    color: white;
+    color: #333;
+    background: transparent;
+    border: 2px solid #999;
+    border-radius: 10px;
     cursor: pointer;
-    border-radius: 5px;
-    transition: transform 0.2s, filter 0.2s, box-shadow 0.2s;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
-#aiEasy {
-    background: linear-gradient(135deg, #00C851, #007E33);
+
+/* ---------- Leaderboard ---------- */
+#leaderboardList {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
-#aiMedium {
-    background: linear-gradient(135deg, #33B5E5, #0099CC);
+#leaderboardList li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    padding: 12px 16px;
+    font-size: clamp(16px, 3.5vw, 20px);
+    font-weight: bold;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
-#aiHard {
-    background: linear-gradient(135deg, #FF4081, #D50000);
+
+/* ---------- Game screen ---------- */
+.game-container {
+    position: relative; /* anchors the end-of-game banner */
+    width: min(800px, 100%);
+    padding: clamp(14px, 3vw, 28px);
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(8px, 1.5vh, 16px);
+    text-align: center;
+    background: rgba(255, 255, 255, 0.2);
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    border-radius: 25px;
+    backdrop-filter: blur(12px);
+    box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.3), inset 3px 3px 10px rgba(255, 255, 255, 0.3);
 }
-#aiEasy:hover, #aiMedium:hover, #aiHard:hover {
-    transform: scale(1.1);
-    filter: brightness(1.2);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+
+.about {
+    max-width: 60ch;
+    margin: 0;
+    font-size: clamp(14px, 2vw, 16px);
 }
-#offline {
-    background: linear-gradient(135deg, #00C851, #007E33);
+
+.board {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, var(--cell));
+    gap: var(--gap);
+    padding: calc(var(--gap) + 2px);
+    background: white;
+    border-radius: 15px;
 }
-#online {
-    background: linear-gradient(135deg, #33B5E5, #0099CC);
+.board::before { /* colourful blurred glow around the board */
+    content: "";
+    position: absolute;
+    inset: -5px;
+    z-index: -1;
+    background: linear-gradient(45deg, #00ff99, #00ccff, #ff66cc, #ffcc00);
+    border-radius: 15px;
+    filter: blur(8px);
 }
-#viewLeaderboard {
-    background: linear-gradient(135deg, #7733e5, #4e00cc);
+
+/* Row wrappers exist for screen readers only; display: contents lets the
+   nine cells flow straight into the board grid in reading order. */
+.row {
+    display: contents;
 }
-.menu-button:hover {
-    transform: scale(1.1);
-    filter: brightness(1.2);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+
+.square {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: var(--cell);
+    height: var(--cell);
+    padding: 0;
+    font-size: calc(var(--cell) * 0.55);
+    font-weight: bold;
+    line-height: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(0, 0, 0, 0.6);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
 }
-/* Theme colours */
-.offline-theme .game-container {
-    box-shadow: 0 0 20px #007E33;
+.square:active {
+    transform: scale(0.95);
 }
+.square:focus-visible {
+    outline: 3px solid #ffcc00; /* visible focus for keyboard users */
+    outline-offset: 2px;
+}
+
+.square.x {
+    color: #ff4d4d;
+    text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
+    animation: pop-in 0.2s ease-out;
+}
+.square.o {
+    color: #3399ff;
+    text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
+    animation: pop-in 0.2s ease-out;
+}
+
+.winning-square { /* highlight the winning line */
+    background: linear-gradient(135deg, #ffcc00, #ff6600) !important;
+    color: black !important;
+    text-shadow: 2px 2px 5px rgba(255, 0, 0, 1);
+    animation: glow 1s infinite alternate;
+}
+
+.game-info {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 12px;
+}
+#playerIndicator,
+#status {
+    flex-basis: 100%; /* each message on its own line, buttons share the row below */
+    margin: 0;
+    font-size: clamp(15px, 2.5vw, 18px);
+    font-weight: bold;
+}
+#playerIndicator:empty {
+    display: none;
+}
+
+#reset, #menu {
+    margin-top: 6px;
+    padding: 10px 20px;
+    font-size: clamp(15px, 2.5vw, 20px);
+    font-weight: bold;
+    color: white;
+    background-color: #b1b1b1;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+#endGameMessage {
+    position: absolute; /* banner laid over the middle of the game card */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-15deg);
+    padding: clamp(12px, 3vw, 20px) clamp(20px, 5vw, 40px);
+    font-size: clamp(24px, 7vw, 50px);
+    font-weight: bold;
+    white-space: nowrap;
+    color: red;
+    text-shadow: 1px 1px 2px white, 0 0 5px red;
+    background: rgba(88, 88, 88, 0.7);
+    border-radius: 10px;
+}
+
+/* ---------- Hover effects (mouse/trackpad only, so taps don't leave them stuck on) ---------- */
+@media (hover: hover) {
+    .menu-button:hover {
+        transform: scale(1.04);
+        filter: brightness(1.15);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+    }
+    .back-button:hover {
+        color: white;
+        background: #333;
+        border-color: #333;
+    }
+    .square:hover {
+        background-color: #00ee77;
+        box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.3);
+    }
+    #reset:hover {
+        background-color: #ff1a1a;
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
+        transform: scale(1.05);
+    }
+    #menu:hover {
+        background-color: #333;
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
+        transform: scale(1.05);
+    }
+}
+
+/* ---------- Mode colour themes ---------- */
+.offline-theme .game-container { box-shadow: 0 0 20px #007E33; }
+.ai-theme .game-container { box-shadow: 0 0 20px rgba(255, 140, 0, 0.5); }
+.online-theme .game-container { box-shadow: 0 0 20px rgba(51, 181, 229, 0.5); }
+
 .offline-theme .about,
 .offline-theme #playerIndicator,
 .offline-theme #status {
     text-shadow: 1px 1px 2px white, 0 0 3px greenyellow, 0 0 2px green;
-}
-.offline-theme .square {
-    border-color: black
-}
-.ai-theme .game-container{
-    box-shadow: 0 0 20px rgba(255, 140, 0, 0.5);
 }
 .ai-theme .about,
 .ai-theme #playerIndicator,
 .ai-theme #status {
     text-shadow: 1px 1px 2px white, 0 0 3px orange, 0 0 2px darkorange;
 }
-.online-theme .game-container {
-    box-shadow: 0 0 20px rgba(51, 181, 229, 0.5);
-}
-.online-theme .about, 
+.online-theme .about,
 .online-theme #playerIndicator,
 .online-theme #status {
     text-shadow: 1px 1px 2px white, 0 0 3px deepskyblue, 0 0 2px dodgerblue;
 }
-
-/* Game */
-.game-container {
-    display: none; /* hide game screen while first menu is on screen */
-    border: 4px solid #00cc66;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 25px;
-    backdrop-filter: blur(12px);
-    box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.3), inset 3px 3px 10px rgba(255, 255, 255, 0.3);
-    border: 4px solid rgba(255, 255, 255, 0.2);
-    padding: 20px;
-    width: 800px;
-    height: 800px;
-    display: flex;
-    text-align: center;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
+.offline-theme .square {
+    border-color: black;
 }
 
-.about{
-    text-shadow: 1px 1px 2px white, 0 0 3px greenyellow, 0 0 2px green;
-    margin-bottom: 20px;
-}
-
-#title {
-    font-size: 2.5rem;
-    font-weight: bold;
-    color: black;
-    text-align: center;
-    position: relative;
-}
-#title::before {
-    content: "Tic-Tac-Toe"; /* make 2nd overlay of the board */
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: -1; /* push glow layer behind the text */
-    color: transparent; /* make 2nd text overlay invisible */
-    background: linear-gradient(45deg, #00ff99, #00ccff, #ff66cc, #ffcc00);
-    filter: blur(10px);
-    opacity: 0.6;
-}
-#ldTitle {
-    font-size: 2.5rem;
-    font-weight: bold;
-    color: black;
-    text-align: center;
-    position: relative;
-}
-#ldTitle::before {
-    content: "Tic-Tac-Toe"; /* make 2nd overlay of the board */
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: -1; /* push glow layer behind the text */
-    color: transparent; /* make 2nd text overlay invisible */
-    background: linear-gradient(45deg, #00ff99, #00ccff, #ff66cc, #ffcc00);
-    filter: blur(10px);
-    opacity: 0.6;
-}
-
-.board{
-    display: grid;
-    justify-content: center;
-    align-items: center;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    width: fit-content;
-    margin: auto;
-    padding: 10px;
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.1);
-    position: relative;
-}
-.board::before {
-    content: "";
-    position: absolute;
-    inset: -5px;
-    background: linear-gradient(45deg, #00ff99, #00ccff, #ff66cc, #ffcc00);
-    border-radius: 15px;
-    filter: blur(8px);
-    z-index: -1;
-}
-
-/* Row wrappers exist for screen readers only; display: contents lets the
-   nine cells flow straight into the board grid in reading order. */
-.row {
-  display: contents;
-}
-
-.square {
-    border: 2px solid rgba(0, 0, 0, 0.6);
-    height: 150px;
-    width: 150px;
-    background: rgba(255, 255, 255, 0.1);
-    cursor: pointer;
-    font-size: 0px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
-}
-
-.square:hover{
-    background-color: #00ee77;
-    box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.3);
-}
-
-.square:active{
-    transform: scale(0.95);
-}
-
-.square.x {
-    font-size: 80px;
-    color: #ff4d4d;
-    text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
-    font-weight: bold;
-    animation: pop-in 0.2s ease-out;
-}
-.square.o {
-    font-size: 80px;
-    color: #3399ff;
-    text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
-    font-weight: bold;
-    animation: pop-in 0.2s ease-out;
-}
-
-#status{
-    font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-
-#playerIndicator {
-    font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-
-/* winning effects */
-/* make board glow blue or red depending on who wins */
-.board.winner-x {
-    box-shadow: 0 0 20px rgba(255, 0, 0, 1);
-}
-.board.winner-o {
-    box-shadow: 0 0 20px rgba(0, 0, 255, 1);
-}
-.winning-square { /* highlight winning combination */
-    background: linear-gradient(135deg, #ffcc00, #ff6600) !important;
-    color: black !important;
-    font-size: 2.5em;
-    font-weight: bold;
-    text-shadow: 2px 2px 5px rgba(255, 0, 0, 1);
-    animation: glow 1s infinite alternate;
+/* ---------- Animations ---------- */
+@keyframes pop-in {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
 }
 @keyframes glow {
-    0% {
-        box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
-    }
-    100% {
-        box-shadow: 0 0 30px rgba(255, 0, 0, 1);
-    }
+    from { box-shadow: 0 0 15px rgba(255, 0, 0, 0.5); }
+    to { box-shadow: 0 0 30px rgba(255, 0, 0, 1); }
 }
 
-#reset, #menu {
-    font-size: 20px;
-    font-weight: bold;
-    color: white;
-    background-color: #b1b1b1;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 20px;
-    margin-top: 20px;
-    cursor: pointer;
-    box-shadow: 0 4px 6px rgba(0, 0 ,0 ,0.2);
-    transition: all 0.3s ease;
-}
-
-#reset:hover, #menu:hover {
-    background-color: #ff1a1a; /* darker red for hover effect */
-    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
-    transform: scale(1.05);
-}
-
-#endGameMessage {
-    display: none; /* hide until the game ends */
-    position: absolute; /* place the text directly ontop of the playing area */
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-15deg);
-    font-size: 50px;
-    font-weight: bold;
-    color: red;
-    text-shadow: 1px 1px 2px white, 0 0 5px red;
-    background: rgba(88, 88, 88, 0.7);
-    padding: 20px 40px;
-    border-radius: 10px;
-    white-space: nowrap;
-}
-
-/* Pop-in animation for X and Os */
-@keyframes pop-in {
-    from {
-        transform: scale(0);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-/* Accessibility features */
-.square:focus {
-    outline: 3px solid #ffcc00; /* Add visible focus for keyboard users */
-}
-
-/* Mobile styles (up to 600px wide): smaller board, padding, fonts and buttons. */
-@media (max-width: 600px) {
-    .game-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 90%;
-        max-width: 400px;
-        height: auto;
-        padding: 15px;
-    }
-
-    .board {
-        grid-template-columns: repeat(3, minmax(60px, 1fr));
-        max-width: 320px;
-    }
-
-    .square {
-        width: 100%;
-        height: auto;
-        aspect-ratio: 1 / 1;
-        font-size: 1.5rem;
-    }
-
-    #title, #ldTitle {
-        font-size: 1.8rem
-    }
-
-    .menu-button {
-        width: 90%;
-        padding: 10px;
-        font-size: 16;
-    }
-
-    #reset, #menu {
-        font-size: 16px;
-        padding: 8px 16px;
-        color: white;
-        background-color: #ff0000; /* no hover effect for phones (just solid red button) */
-    }
-
-    .about {
-        font-size: 14px;
-    }
-
-    #endGameMessage {
-        font-size: 24px;
-        text-align: center;
-        margin: 0 10px;
-    }
-
-    .square.x {
-        font-size: 55px;
-        color: #ff4d4d;
-        text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
-        font-weight: bold;
-        animation: pop-in 0.2s ease-out;
-    }
+/* OS "reduce motion" setting: keep colour, glow and fade feedback, but drop
+   the movement (scaling, popping and the endless pulse). */
+@media (prefers-reduced-motion: reduce) {
+    .square.x,
     .square.o {
-        font-size: 55px;
-        color: #3399ff;
-        text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
-        font-weight: bold;
-        animation: pop-in 0.2s ease-out;
+        animation-name: fade-in;
     }
-    #aiEasy, #aiMedium, #aiHard {
-        padding: 10px 10px;
+    .winning-square {
+        animation: none;
+        box-shadow: 0 0 22px rgba(255, 0, 0, 0.8);
     }
-}
-
-/* Tablet styles (601px to 1024px wide): scaled-down board that need not fill the screen. */
-@media (max-width: 1024px) and (min-width: 601px) {
-    .game-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 100%;
-        max-width: 600px;
-        height: auto;
-        padding: 15px;
-    }
-
-    .board {
-        grid-template-columns: repeat(3, minmax(60px, 1fr));
-        max-width: 550px;
-    }
-
-    .square {
-        width: 100%;
-        height: auto;
-        aspect-ratio: 1 / 1;
-        font-size: 1.5rem;
-    }
-
-    #title, #ldTitle {
-        font-size: 1.8rem
-    }
-
-    .menu-button {
-        width: 90%;
-        padding: 10px;
-        font-size: 16;
-    }
-
-    #reset, #menu {
-        font-size: 16px;
-        padding: 8px 16px;
-        color: white;
-        background-color: #ff0000;
-    }
-
-    .about {
-        font-size: 14px;
-    }
-
-    #endGameMessage {
-        font-size: 24px;
-        text-align: center;
-        margin: 0 10px;
-    }
-
-    .square.x {
-        font-size: 55px;
-        color: #ff4d4d;
-        text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
-        font-weight: bold;
-        animation: pop-in 0.2s ease-out;
-    }
-    .square.o {
-        font-size: 55px;
-        color: #3399ff;
-        text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
-        font-weight: bold;
-        animation: pop-in 0.2s ease-out;
+    .menu-button:hover,
+    #reset:hover,
+    #menu:hover,
+    .square:active {
+        transform: none;
     }
 }
-
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
