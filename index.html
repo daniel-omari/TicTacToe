@@ -9,8 +9,8 @@
 <body>
     <!-- Game mode selection UI-->
     <div id="menu-screen">
-        <h1 id="title">Tic-Tac-Toe</h1>
-        <p>Select a game mode:</p>
+        <h1 class="glow-title" data-text="Tic-Tac-Toe">Tic-Tac-Toe</h1>
+        <p class="screen-subtitle">Select a game mode:</p>
         <button class="menu-button" id="ai">Play VS AI</button>
         <button class="menu-button" id="online">Play Online</button>
         <button class="menu-button" id="offline">Play Offline</button>
@@ -19,14 +19,17 @@
 
     <!-- AI difficulty selection-->
     <div id="ai-mode-selection" style="display: none;">
-        <button class="menu-button" id="aiEasy">Naive</button>
-        <button class="menu-button" id="aiMedium">Intermediate</button>
-        <button class="menu-button" id="aiHard">Advanced</button>
+        <h2 class="glow-title" data-text="Play VS AI">Play VS AI</h2>
+        <p class="screen-subtitle">Choose a difficulty:</p>
+        <button class="menu-button" id="aiEasy">Naive <span class="hint">Picks random moves</span></button>
+        <button class="menu-button" id="aiMedium">Intermediate <span class="hint">Sharp, but beatable</span></button>
+        <button class="menu-button" id="aiHard">Advanced <span class="hint">Never loses</span></button>
+        <button class="back-button" id="aiBack">Back</button>
     </div>
 
     <!-- PVP and Offline game -->
     <div class="game-container" id="game-container" style="display: none;">
-        <h1 id="title">Tic-Tac-Toe</h1>
+        <h1 class="glow-title" data-text="Tic-Tac-Toe">Tic-Tac-Toe</h1>
         <p class="about">Tic-Tac-Toe is a classic game of strategy played on a 3x3 grid. The goal is to align three symbols in a row, either horizontally, vertically, or diagonally.</p>
         <div class="board" role="grid" aria-label="Tic-Tac-Toe board">
             <div class="row" role="row">
@@ -56,10 +59,12 @@
     </div>
 
     <!-- Leaderboard -->
-     <div id="leaderboard" style="display: none;">
-        <h2 id="ldTitle">Leaderboard</h2>
+    <div id="leaderboard" style="display: none;">
+        <h2 class="glow-title" data-text="Leaderboard">Leaderboard</h2>
+        <p class="screen-subtitle">Online results by symbol</p>
         <ul id="leaderboardList" role="list" aria-live="polite"></ul>
-     </div>
+        <button class="back-button" id="leaderboardBack">Back</button>
+    </div>
 
 
     <script src="ticTacToe.js"></script>

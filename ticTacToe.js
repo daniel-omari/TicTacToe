@@ -22,7 +22,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const menuButton = document.getElementById('menu');
     const playerIndicator = document.getElementById("playerIndicator");
     const endGameMessage = document.getElementById("endGameMessage");
-    const leaderboard = document.getElementById("viewLeaderboard");
+    const leaderboardButton = document.getElementById("viewLeaderboard");
+    const leaderboardScreen = document.getElementById("leaderboard");
+    const leaderboardList = document.getElementById("leaderboardList");
+    const leaderboardBackButton = document.getElementById("leaderboardBack");
 
     // AI buttons
     const aiButton = document.getElementById("ai");
@@ -30,6 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const mediumButton = document.getElementById("aiMedium");
     const impossibleButton = document.getElementById("aiHard");
     const aiModeSelection = document.getElementById("ai-mode-selection");
+    const aiBackButton = document.getElementById("aiBack");
 
     easyButton.addEventListener("click", () => startAIGame("easy"));
     mediumButton.addEventListener("click", () => startAIGame("medium"));
@@ -37,7 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Online mode buttons
     const onlineButton = document.getElementById("online");
-    leaderboard.addEventListener("click", () => displayLeaderboard());
+    leaderboardButton.addEventListener("click", () => displayLeaderboard());
     onlineButton.addEventListener("click", () => startOnlineGame());
 
     // Colour themes for each mode
@@ -63,8 +67,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // AI mode selection
-    aiButton.addEventListener("click", () => { 
-        menuScreen.style.display = "none"; aiModeSelection.style.display = "flex";
+    aiButton.addEventListener("click", () => {
+        menuScreen.style.display = "none";
+        aiModeSelection.style.display = "flex";
+        easyButton.focus();
     });
 
     // Function to check if there is a winner or if the game is a draw
@@ -177,8 +183,6 @@ document.addEventListener("DOMContentLoaded", () => {
         statusText.textContent = "Player X's turn";
         endGameMessage.style.display = "none";
 
-        document.querySelector(".board").classList.remove("winner-x", "winner-o");
-
         squares.forEach((square) => {
             square.textContent = "";
             square.classList.remove("x", "o", "winning-square"); // clear marks and highlight from the previous game
@@ -201,11 +205,17 @@ document.addEventListener("DOMContentLoaded", () => {
         resetGame(); // also cancels a pending AI move
         playerIndicator.textContent = "";
         resetButton.style.display = ""; // online mode hides it
-        applyTheme(null);
+        showMenu(aiButton);
+    }
 
+    // Show the main menu (hiding every other screen) and move keyboard focus into it
+    function showMenu(focusTarget) {
+        aiModeSelection.style.display = "none";
+        leaderboardScreen.style.display = "none";
         gameContainer.style.display = "none";
         menuScreen.style.display = ""; // back to its stylesheet layout
-        aiButton.focus();
+        applyTheme(null);
+        focusTarget.focus();
     }
 
     // AI Functions
@@ -432,44 +442,47 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Leaderboard function
+    // Leaderboard: show the screen, then fill it with the online results from the server
     function displayLeaderboard() {
+        menuScreen.style.display = "none";
+        leaderboardScreen.style.display = "flex";
+        leaderboardScreen.setAttribute("tabindex", "-1"); // focusable from script only
+        leaderboardScreen.focus();
 
-        document.getElementById("menu-screen").style.display = "none"; // hide all other elements
-        document.getElementById("leaderboard").style.display = "block"; // show the hidden leaderboard
-
-        // Make leaderboard focusable and focus on it
-        const leaderboardContainer = document.getElementById("leaderboard");
-        leaderboardContainer.setAttribute("tabindex", "-1");
-        leaderboardContainer.focus();
-
-        // Fetch the leaderboard data from the server
         fetch('http://localhost:3000/leaderboard')
         .then(response => response.json())
-        .then(data => {
-            const leaderboardList = document.getElementById("leaderboardList");
-            leaderboardList.innerHTML = '';  // Clear previous leaderboard data
-            
-            if (data.length === 0) {
-                leaderboardList.innerHTML = '<li>No data available</li>';
-                leaderboardList.setAttribute("aria-live", "polite");
+        .then(rows => {
+            leaderboardList.replaceChildren();
+            const wins = rows.filter(row => row.winner !== "draw");
+            const draws = rows.find(row => row.winner === "draw");
+
+            if (rows.length === 0) {
+                addLeaderboardRow("No online games played yet", "");
+                return;
             }
-        
-            // Populate the leaderboard with data from the server
-            data.forEach(player => {
-                const listItem = document.createElement('li');
-                listItem.textContent = `${player.winner}: ${player.wins} wins`; // Display the player and win count
-                listItem.setAttribute("role", "listitem");
-                leaderboardList.appendChild(listItem);
+            wins.forEach(row => {
+                addLeaderboardRow(`Player ${row.winner}`, `${row.wins} ${row.wins === 1 ? "win" : "wins"}`);
             });
-            leaderboardList.setAttribute("aria-live", "polite");
+            if (draws) {
+                addLeaderboardRow("Draws", String(draws.wins));
+            }
         })
         .catch(error => {
             console.error('Error fetching leaderboard:', error);
-            const leaderboardList = document.getElementById("leaderboardList");
-            leaderboardList.innerHTML = '<li>Failed to load leaderboard data.</li>';
-            leaderboardList.setAttribute("aria-live", "polite");
+            leaderboardList.replaceChildren();
+            addLeaderboardRow("Couldn't reach the server", "");
         });
+    }
+
+    // One leaderboard line: a label on the left and a value on the right
+    function addLeaderboardRow(label, value) {
+        const item = document.createElement("li");
+        const labelSpan = document.createElement("span");
+        const valueSpan = document.createElement("span");
+        labelSpan.textContent = label;
+        valueSpan.textContent = value;
+        item.append(labelSpan, valueSpan);
+        leaderboardList.appendChild(item);
     }
 
     // Event listeners
@@ -480,4 +493,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     resetButton.addEventListener('click', resetGame);
     menuButton.addEventListener('click', returnToMenu);
+    aiBackButton.addEventListener('click', () => showMenu(aiButton));
+    leaderboardBackButton.addEventListener('click', () => showMenu(leaderboardButton));
 });
