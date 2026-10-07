@@ -175,7 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         document.querySelector(".board").classList.remove("winner-x", "winner-o");
 
-        squares.forEach((square, index) => {
+        squares.forEach((square) => {
             square.textContent = "";
             square.classList.remove("x", "o", "winning-square"); // clear marks and highlight from the previous game
             square.setAttribute("aria-label", `Empty cell`);
