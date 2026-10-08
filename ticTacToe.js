@@ -20,6 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const statusText = document.getElementById('status');
     const resetButton = document.getElementById('reset');
     const menuButton = document.getElementById('menu');
+    const rematchButton = document.getElementById('rematch');
     const playerIndicator = document.getElementById("playerIndicator");
     const endGameMessage = document.getElementById("endGameMessage");
     const leaderboardButton = document.getElementById("viewLeaderboard");
@@ -196,6 +197,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function returnToMenu() {
         if (ws) { // leaving an online game: stop listening, and closing tells the server we left
             ws.onmessage = null;
+            ws.onclose = null;
             ws.close();
             ws = null;
             symbol = null;
@@ -205,6 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
         resetGame(); // also cancels a pending AI move
         playerIndicator.textContent = "";
         resetButton.style.display = ""; // online mode hides it
+        rematchButton.hidden = true;
         showMenu(aiButton);
     }
 
@@ -345,8 +348,21 @@ document.addEventListener("DOMContentLoaded", () => {
         currentRoom = "gameRoom";
         ws = new WebSocket("ws://localhost:3000");
 
+        let connected = false;
         ws.onopen = () => {
+            connected = true;
             ws.send(JSON.stringify({ type: "join", room: currentRoom }));
+        };
+
+        // Without this a dead or unreachable server would leave the page "searching" forever
+        ws.onclose = () => {
+            if (mode !== "online") return; // we left on purpose via the Menu button
+            gameActive = false;
+            rematchButton.hidden = true;
+            statusText.textContent = connected
+                ? "Lost connection to the game server."
+                : "Couldn't reach the game server. Is it running?";
+            statusText.setAttribute("aria-live", "polite");
         };
 
         ws.onmessage = (event) => {
@@ -357,10 +373,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 playerIndicator.textContent = `You are player: ${symbol}`;
             }
 
-            if (data.type === "start") {
-                statusText.textContent = "Game started! X plays first.";
+            if (data.type === "start") { // first game or a rematch: begin from a clean board
+                resetGame();
+                rematchButton.hidden = true;
+                statusText.textContent = symbol === "X"
+                    ? "Game started! You go first."
+                    : "Game started! Your opponent goes first.";
                 statusText.setAttribute("aria-live", "polite");
-                gameActive = true;
             }
 
             if (data.type === "game_over") {
@@ -376,6 +395,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
 
                 gameActive = false;
+                rematchButton.hidden = false;
+                rematchButton.disabled = false;
+            }
+
+            if (data.type === "rematch_requested") {
+                statusText.textContent = "Your opponent wants a rematch!";
+                statusText.setAttribute("aria-live", "polite");
             }
 
             if (data.type === "waiting") {
@@ -410,10 +436,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 statusText.setAttribute("aria-live", "polite");
             }
 
-            if (data.type === "opponent_left") {
-                statusText.textContent = "Opponent disconnected. Waiting for reconnection...";
+            if (data.type === "opponent_left") { // fresh board while we wait for someone new
+                resetGame();
+                rematchButton.hidden = true;
+                gameActive = false;
+                statusText.textContent = "Your opponent left. Waiting for a new opponent...";
                 statusText.setAttribute("aria-live", "polite");
-                gameActive = false; // disable moves in the meanwhile
             }
         };
     }
@@ -433,6 +461,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Send move to server
         ws.send(JSON.stringify({ type: "move", room: currentRoom, index: index, symbol: symbol }));
+    }
+
+    // Ask the server for a rematch; the game restarts once both players have asked
+    function requestRematch() {
+        if (!ws) return;
+        ws.send(JSON.stringify({ type: "rematch" }));
+        rematchButton.disabled = true;
+        statusText.textContent = "Waiting for your opponent to accept the rematch...";
+        statusText.setAttribute("aria-live", "polite");
     }
 
     function updateOnlineBoard(boardState) {
@@ -493,6 +530,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     resetButton.addEventListener('click', resetGame);
     menuButton.addEventListener('click', returnToMenu);
+    rematchButton.addEventListener('click', requestRematch);
     aiBackButton.addEventListener('click', () => showMenu(aiButton));
     leaderboardBackButton.addEventListener('click', () => showMenu(leaderboardButton));
 });

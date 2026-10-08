@@ -254,7 +254,7 @@ body {
     display: none;
 }
 
-#reset, #menu {
+#reset, #menu, #rematch {
     margin-top: 6px;
     padding: 10px 20px;
     font-size: clamp(15px, 2.5vw, 20px);
@@ -266,6 +266,11 @@ body {
     cursor: pointer;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
     transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+#rematch:disabled {
+    opacity: 0.6;
+    cursor: default;
 }
 
 #endGameMessage {
@@ -301,6 +306,11 @@ body {
     }
     #reset:hover {
         background-color: #ff1a1a;
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
+        transform: scale(1.05);
+    }
+    #rematch:hover:not(:disabled) {
+        background-color: #00a651;
         box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
         transform: scale(1.05);
     }
@@ -359,6 +369,7 @@ body {
     .menu-button:hover,
     #reset:hover,
     #menu:hover,
+    #rematch:hover,
     .square:active {
         transform: none;
     }
