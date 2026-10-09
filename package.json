@@ -4,7 +4,9 @@
   "description": "Web-based Tic-Tac-Toe with a minimax AI and online multiplayer over WebSockets.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test --disable-warning=ExperimentalWarning",
+    "lint": "eslint ."
   },
   "license": "MIT",
   "dependencies": {
@@ -14,5 +16,10 @@
   },
   "engines": {
     "node": ">=22.13"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0"
   }
 }

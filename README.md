@@ -1,5 +1,7 @@
 # Tic-Tac-Toe
 
+[![CI](https://github.com/daniel-omari/TicTacToe/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel-omari/TicTacToe/actions/workflows/ci.yml)
+
 A web-based Tic-Tac-Toe game with three ways to play: local two-player, against an
 AI with selectable difficulty, and online multiplayer against another person over the
 network. The frontend is vanilla HTML, CSS and JavaScript with no frameworks; the
@@ -64,16 +66,22 @@ Accessibility was a first-class goal rather than an afterthought:
 - `ws` for the WebSocket server that drives online play.
 - SQLite through Node's built-in `node:sqlite` module for game results and the leaderboard
   (no native add-on to compile).
-- Responsive CSS with media queries for mobile and tablet layouts.
+- Fluid, responsive CSS (`clamp()` / `min()`) that scales smoothly from phones to desktops.
+- `node:test` for unit and integration tests, ESLint, and GitHub Actions CI.
 
 ## Project structure
 
 - `index.html`: page markup, the menu, the board, and the leaderboard view.
 - `styles.css`: all styling, including the per-mode colour themes and responsive layouts.
-- `ticTacToe.js`: client-side game logic, the AI (minimax and difficulty levels), and the
+- `game.js`: the pure game rules and AI (win and draw detection, minimax with alpha-beta
+  pruning, difficulty levels). It has no page or network code, and the same file is used
+  by the browser, the server and the tests, so the rules only exist once.
+- `ticTacToe.js`: the browser client: screens, board display, keyboard controls and the
   WebSocket client for online play.
 - `server.js`: the WebSocket and HTTP server, room/matchmaking logic, and the SQLite
   leaderboard.
+- `test/`: unit tests for the rules and AI, and integration tests that run the real server
+  against real WebSocket clients.
 
 ## Running
 
@@ -82,12 +90,30 @@ Local and versus-AI play need no server: just open `index.html` in a browser.
 For online multiplayer and the leaderboard, start the server (needs Node.js 22.13 or newer):
 
 ```bash
-npm install     # installs express, ws and cors
+npm install     # installs express, ws and cors (plus ESLint for development)
 npm start       # starts the server on port 3000
 ```
 
 Then open `index.html` in two browser tabs or on two machines and choose Play Online. The
 server creates `tic_tac_toe.db` automatically on first run.
+
+## Testing
+
+```bash
+npm test        # unit tests for the rules and AI, plus server integration tests
+npm run lint    # ESLint
+```
+
+Highlights:
+
+- **The full-search AI is proven never to lose.** Tic-Tac-Toe is small enough to check
+  exhaustively, so a test plays out every possible game against it, as X and as O, and
+  fails if it ever loses.
+- **The server is tested as a black box:** a real instance on a random port with real
+  WebSocket clients checks matchmaking, rejection of illegal and tampered moves,
+  malformed messages, rematches, players leaving mid-game, and the leaderboard API.
+
+GitHub Actions runs linting, the tests and `npm audit` on Node 22 and 24 for every push.
 
 ## Notes
 
