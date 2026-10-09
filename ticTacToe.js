@@ -74,43 +74,23 @@ document.addEventListener("DOMContentLoaded", () => {
         easyButton.focus();
     });
 
-    // Function to check if there is a winner or if the game is a draw
+    // Check the board with the shared rules and show the result. Returns true if the game is over.
     function checkWinner() {
-        // All possible winning combinations
-        const winningPatterns = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+        const result = TicTacToeGame.getResult(board);
+        if (!result) return false;
 
-        for (const pattern of winningPatterns) {
-            const [a, b, c] = pattern;
-
-            // Check for winning combinations and detect winner
-            if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-                gameActive = false;
-                winner = board[a]; // identify the winner by their winning combination
-            
-                // Highlight winning combination
-                document.getElementById(a).classList.add("winning-square");
-                document.getElementById(b).classList.add("winning-square");
-                document.getElementById(c).classList.add("winning-square");
-
-                // Display winning message
-                endGameMessage.textContent = `Player ${winner} WINS!`;
-                endGameMessage.style.display = "block";
-                statusText.textContent = `Player ${board[a]} wins!`;
-                statusText.setAttribute("aria-live", "assertive"); // announce winner
-                return true;
-            }
-        }
-        
-        // Check if the game is a draw
-        if (board.every(cell => cell !== "")) {
-            gameActive = false;
+        gameActive = false;
+        if (result.winner === "draw") {
             statusText.textContent = "It's a draw!";
             showEndGameMessage("It's a draw!");
-            statusText.setAttribute("aria-live", "assertive");
-            return true;
+        } else {
+            winner = result.winner;
+            result.line.forEach((index) => document.getElementById(index).classList.add("winning-square"));
+            showEndGameMessage(`Player ${winner} WINS!`);
+            statusText.textContent = `Player ${winner} wins!`;
         }
-        
-        return false;
+        statusText.setAttribute("aria-live", "assertive"); // announce the result
+        return true;
     }
 
     // Function to show the winner or draw message
@@ -154,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
         statusText.setAttribute("aria-live", "polite");
 
         if (mode === "ai" && currentPlayer === "O") { // AI moves only if AI mode is active and it's AI's turn
-            aiTimer = setTimeout(() => aiMove(board, aiDifficulty), 500); // short pause so the AI feels like it's thinking
+            aiTimer = setTimeout(playAiTurn, 500); // short pause so the AI feels like it's thinking
         }
     }
 
@@ -229,109 +209,22 @@ document.addEventListener("DOMContentLoaded", () => {
         resetGame();
     }
 
-    // Same as regular checkWinner() function but without UI as it is only for the AI move simulations
-    function checkAiWinner(aiBoard) {
-        const winningPatterns = [[0, 1, 2], [3, 4, 5], [6, 7, 8],[0, 3, 6], [1, 4, 7], [2, 5, 8],[0, 4, 8], [2, 4, 6]];
-        
-        for (const pattern of winningPatterns) {
-            const [a, b, c] = pattern;
-            if (aiBoard[a] && aiBoard[a] === aiBoard[b] && aiBoard[a] === aiBoard[c]) {
-                return aiBoard[a];
-            }
-        }
-    
-        return null;
-    }
+    // The AI's turn: choose a move with the shared game logic, then show it
+    function playAiTurn() {
+        const move = TicTacToeGame.aiMove(board, aiDifficulty, "O");
+        if (move === -1) return;
 
-    function aiMove(board, difficulty) {
-        let move;
-    
-        if (difficulty === "easy") {
-            move = easyAIMove(board);
-        }
-    
-        else if (difficulty === "medium") {
-            move = mediumAIMove(board);
-        }
-        
-        else {
-            move = impossibleAIMove(board);
-        }
-    
-        if (move !== -1) {
-            board[move] = "O"; // update board
-            document.getElementById(move).textContent = "O"; // update UI
-            document.getElementById(move).classList.add("o");
-            document.getElementById(move).setAttribute("aria-label", "AI placed O on cell " + (move + 1));
-    
-            if (checkWinner() === true) { // check if AI's move resulted in a win or draw
-                return; 
-            }
-    
-            // Turn switches back to player X once AI's move has been made
-            currentPlayer = "X";
-            statusText.textContent = `Player ${currentPlayer}'s turn`;
-            statusText.setAttribute("aria-live", "assertive"); // announce status change
-        }
-    }
-    
-    function easyAIMove(board) { // picks a random empty cell
-        const available = board.map((val, i) => (val === "" ? i : null)).filter(val => val !== null);
-        return available.length ? available[Math.floor(Math.random() * available.length)] : -1;
-    }
-    
-    function mediumAIMove(board) { // plays the optimal move ~70% of the time, otherwise random
-        if (Math.random() < 0.7) return impossibleAIMove(board);
-        return easyAIMove(board);
-    }
-    
-    function impossibleAIMove(board) { // full minimax search, effectively unbeatable
-        let bestMove = -1;
-        let bestScore = -Infinity;
-    
-        for (let i = 0; i < board.length; i++) {
-            if (board[i] === "") {
-                board[i] = "O";
-                let score = minimax(board, 0, false, -Infinity, Infinity);
-                board[i] = "";
-    
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMove = i;
-                }
-            }
-        }
-        return bestMove;
-    }
-    
-    // Minimax with alpha-beta pruning to speed up the AI's decision making.
-    function minimax(board, depth, isMaximizing, alpha, beta) {
-        let winner = checkAiWinner(board);
-        if (winner === "O") return 10 - depth;
-        if (winner === "X") return depth - 10;
-        if (board.every(cell => cell !== "")) return 0;
-    
-        let bestScore = isMaximizing ? -Infinity : Infinity;
-    
-        for (let i = 0; i < board.length; i++) {
-            if (board[i] === "") {
-                let aiBoard = [...board];
-                aiBoard[i] = isMaximizing ? "O" : "X";
-    
-                let score = minimax(aiBoard, depth + 1, !isMaximizing, alpha, beta);
-                bestScore = isMaximizing ? Math.max(score, bestScore) : Math.min(score, bestScore);
+        board[move] = "O";
+        const cell = document.getElementById(move);
+        cell.textContent = "O";
+        cell.classList.add("o");
+        cell.setAttribute("aria-label", "AI placed O on cell " + (move + 1));
 
-                // Alpha-Beta pruning (for faster AI responses)
-                if (isMaximizing) {
-                    alpha = Math.max(alpha, bestScore);
-                    if (beta <= alpha) break;
-                } else {
-                    beta = Math.min(beta, bestScore);
-                    if (beta <= alpha) break;
-                }
-            }
-        }
-        return bestScore;
+        if (checkWinner() === true) return; // the AI's move ended the game
+
+        currentPlayer = "X";
+        statusText.textContent = `Player ${currentPlayer}'s turn`;
+        statusText.setAttribute("aria-live", "assertive"); // announce status change
     }
 
     // Online PVP mode functions

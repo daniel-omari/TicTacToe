@@ -4,6 +4,7 @@
 const WebSocket = require('ws');
 const http = require('http');
 const { DatabaseSync } = require('node:sqlite');
+const TicTacToeGame = require('./game.js');
 
 const express = require('express');
 const app = express();
@@ -15,7 +16,8 @@ const cors = require('cors');
 app.use(cors());
 
 // Game results live in SQLite via Node's built-in driver (no native add-on to build).
-const db = new DatabaseSync('tic_tac_toe.db');
+// DB_PATH lets the tests use a throwaway in-memory database (":memory:").
+const db = new DatabaseSync(process.env.DB_PATH || 'tic_tac_toe.db');
 db.exec(`CREATE TABLE IF NOT EXISTS game_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     winner TEXT NOT NULL,
@@ -38,27 +40,9 @@ function safeSend(ws, payload) {
     }
 }
 
-// Server-side winner check function
-function checkOnlineWinner(board) {
-    const winningPatterns = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
-
-    for (const pattern of winningPatterns) {
-        const [a, b, c] = pattern;
-        if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-            return { winner: board[a], winningCombination: [a, b, c] }; // return winner and the winning combination
-        }
-    }
-
-    // Check for a draw
-    if (board.every(cell => cell !== "")) {
-        return { winner: "draw", winningCombination: [] };
-    }
-    return null; // No winner yet
-}
-
 // Put a room back to an empty board with X to move.
 function resetRoom(room) {
-    room.board = Array(9).fill("");
+    room.board = TicTacToeGame.emptyBoard();
     room.turn = "X";
     room.finished = false;      // true between game over and a rematch
     room.rematchVotes = new Set();
@@ -127,10 +111,10 @@ function handleMove(ws, data) {
     room.board[index] = ws.symbol;
     room.turn = room.turn === "X" ? "O" : "X";
 
-    // Check for winner after every move
-    const result = checkOnlineWinner(room.board);
+    // Check for a win or draw with the shared rules (the same code the browser uses)
+    const result = TicTacToeGame.getResult(room.board);
     if (result) {
-        const { winner, winningCombination } = result;
+        const { winner, line } = result;
 
         // Store the result in the database
         try {
@@ -146,7 +130,7 @@ function handleMove(ws, data) {
             safeSend(player, {
                 type: "game_over",
                 winner: winner,
-                winning_combination: winningCombination
+                winning_combination: line
             });
         });
 
@@ -194,7 +178,7 @@ wss.on('connection', (ws) => {
         let data;
         try {
             data = JSON.parse(message);
-        } catch (err) {
+        } catch {
             return;
         }
         if (!data || typeof data !== 'object') return;
@@ -239,4 +223,11 @@ app.get('/leaderboard', (req, res) => {
     }
 });
 
-server.listen(3000, () => console.log('Server running on port 3000'));
+// Only start listening when run directly (npm start). The tests import this file and
+// start it on a random free port instead.
+const PORT = Number(process.env.PORT) || 3000;
+if (require.main === module) {
+    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+module.exports = { server, wss };
