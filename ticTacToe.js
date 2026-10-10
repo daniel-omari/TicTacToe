@@ -1,194 +1,110 @@
 "use strict";
 document.addEventListener("DOMContentLoaded", () => {
 
-    let board = ["", "", "", "", "", "", "", "", ""]; // represents the 3x3 board
-    let currentPlayer = 'X';
-    let gameActive = true;
-    let mode = null; // "offline", "ai" or "online" (null = still on the menu)
-    let winner = null;
-    let aiDifficulty = "easy"; // default AI difficulty
+    // ---- State ----
+    // Everything the game screen shows lives in this one object. Event handlers
+    // update it and then call render(); nothing else writes to the board in the page.
+    const state = {
+        mode: null,           // "offline", "ai" or "online" (null = still on the menu)
+        board: TicTacToeGame.emptyBoard(),
+        turn: "X",            // whose move it is
+        active: true,         // false before an online game starts and once a game is over
+        result: null,         // TicTacToeGame.getResult() once the game is over
+        notice: null,         // one-off status message shown instead of "Player X's turn"
+        aiDifficulty: "easy",
+        symbol: null,         // online only: the symbol the server gave us
+        rematch: "hidden",    // online only: "hidden", "available" or "requested"
+    };
+
+    const ONLINE_ROOM = "gameRoom";
     let aiTimer = null; // pending AI move, so a reset or leaving the game can cancel it
-    let ws = null;
-    let symbol = null;
-    let currentRoom;
+    let ws = null;      // connection to the game server while in online mode
 
     // Elements
     const menuScreen = document.getElementById("menu-screen");
     const gameContainer = document.getElementById("game-container");
-    const offlineButton = document.getElementById("offline");
-    const squares = document.querySelectorAll('.square');
-    const statusText = document.getElementById('status');
-    const resetButton = document.getElementById('reset');
-    const menuButton = document.getElementById('menu');
-    const rematchButton = document.getElementById('rematch');
+    const squares = document.querySelectorAll(".square");
+    const statusText = document.getElementById("status");
+    const resetButton = document.getElementById("reset");
+    const menuButton = document.getElementById("menu");
+    const rematchButton = document.getElementById("rematch");
     const playerIndicator = document.getElementById("playerIndicator");
     const endGameMessage = document.getElementById("endGameMessage");
+    const offlineButton = document.getElementById("offline");
+    const onlineButton = document.getElementById("online");
     const leaderboardButton = document.getElementById("viewLeaderboard");
     const leaderboardScreen = document.getElementById("leaderboard");
     const leaderboardList = document.getElementById("leaderboardList");
     const leaderboardBackButton = document.getElementById("leaderboardBack");
-
-    // AI buttons
     const aiButton = document.getElementById("ai");
+    const aiModeSelection = document.getElementById("ai-mode-selection");
     const easyButton = document.getElementById("aiEasy");
     const mediumButton = document.getElementById("aiMedium");
     const impossibleButton = document.getElementById("aiHard");
-    const aiModeSelection = document.getElementById("ai-mode-selection");
     const aiBackButton = document.getElementById("aiBack");
 
-    easyButton.addEventListener("click", () => startAIGame("easy"));
-    mediumButton.addEventListener("click", () => startAIGame("medium"));
-    impossibleButton.addEventListener("click", () => startAIGame("impossible"));
+    // ---- Rendering ----
 
-    // Online mode buttons
-    const onlineButton = document.getElementById("online");
-    leaderboardButton.addEventListener("click", () => displayLeaderboard());
-    onlineButton.addEventListener("click", () => startOnlineGame());
+    // Draw the game screen from state. Safe to call any number of times.
+    function render() {
+        const winningLine = state.result ? state.result.line : [];
 
-    // Colour themes for each mode
-    function applyTheme(theme){
-        document.body.classList.remove("offline-theme", "ai-theme", "online-theme");
-        if (theme) document.body.classList.add(`${theme}-theme`); // null = plain menu look
+        squares.forEach((square, index) => {
+            const mark = state.board[index];
+            const winning = winningLine.includes(index);
+            if (square.textContent !== mark) square.textContent = mark;
+            square.classList.toggle("x", mark === "X");
+            square.classList.toggle("o", mark === "O");
+            square.classList.toggle("winning-square", winning);
+            square.setAttribute("aria-label", cellLabel(index, mark, winning));
+            if (mark) square.setAttribute("aria-disabled", "true");
+            else square.removeAttribute("aria-disabled");
+        });
+
+        statusText.textContent = statusMessage();
+
+        endGameMessage.style.display = state.result ? "block" : "none";
+        if (state.result) {
+            endGameMessage.textContent = state.result.winner === "draw"
+                ? "It's a draw!"
+                : `Player ${state.result.winner} WINS!`;
+        }
+
+        playerIndicator.textContent = state.mode === "online" && state.symbol
+            ? `You are player: ${state.symbol}`
+            : "";
+        resetButton.hidden = state.mode === "online"; // online games restart with Rematch instead
+        rematchButton.hidden = state.rematch === "hidden";
+        rematchButton.disabled = state.rematch === "requested";
     }
-    document.getElementById("offline").addEventListener("click", () => applyTheme("offline"));
-    document.getElementById("ai").addEventListener("click", () => applyTheme("ai"));
-    document.getElementById("online").addEventListener("click", () => applyTheme("online"));
+
+    // The line under the board: a one-off notice, the result, or whose turn it is
+    function statusMessage() {
+        if (state.notice) return state.notice;
+        if (state.result) {
+            return state.result.winner === "draw" ? "It's a draw!" : `Player ${state.result.winner} wins!`;
+        }
+        return `Player ${state.turn}'s turn`;
+    }
+
+    // What a screen reader announces for one cell, e.g. "Cell 5, X, winning line"
+    function cellLabel(index, mark, winning) {
+        const label = `Cell ${index + 1}, ${mark || "empty"}`;
+        return winning ? `${label}, winning line` : label;
+    }
+
+    // ---- Screens ----
+
+    // Colour theme for each mode (null = plain menu look)
+    function applyTheme(theme) {
+        document.body.classList.remove("offline-theme", "ai-theme", "online-theme");
+        if (theme) document.body.classList.add(`${theme}-theme`);
+    }
 
     function switchToGame() {
         menuScreen.style.display = "none";
         aiModeSelection.style.display = "none";
         gameContainer.style.display = "flex";
-    }
-
-    // Offline PvP mode (hide UI move to PVP gamescreen)
-    offlineButton.addEventListener("click", () => {
-        mode = "offline";
-        switchToGame(); 
-        resetGame();
-    });
-
-    // AI mode selection
-    aiButton.addEventListener("click", () => {
-        menuScreen.style.display = "none";
-        aiModeSelection.style.display = "flex";
-        easyButton.focus();
-    });
-
-    // Check the board with the shared rules and show the result. Returns true if the game is over.
-    function checkWinner() {
-        const result = TicTacToeGame.getResult(board);
-        if (!result) return false;
-
-        gameActive = false;
-        if (result.winner === "draw") {
-            statusText.textContent = "It's a draw!";
-            showEndGameMessage("It's a draw!");
-        } else {
-            winner = result.winner;
-            result.line.forEach((index) => document.getElementById(index).classList.add("winning-square"));
-            showEndGameMessage(`Player ${winner} WINS!`);
-            statusText.textContent = `Player ${winner} wins!`;
-        }
-        statusText.setAttribute("aria-live", "assertive"); // announce the result
-        return true;
-    }
-
-    // Function to show the winner or draw message
-    function showEndGameMessage(message) {
-        endGameMessage.textContent = message;
-        endGameMessage.style.display = 'block';
-    }
-
-    // Handle a player's move
-    function makeMove(event, index) {
-        if (board[index] !== "" || gameActive === false) {
-            return; // prevents moves after game has ended
-        }
-
-        // Ignore clicks while the AI is thinking
-        if (mode === "ai" && currentPlayer === "O") {
-            return;
-        }
-
-        if (mode === "online") { 
-            onlineMove(index); 
-            return; 
-        }
-
-        // Offline mode - player's move
-        board[index] = currentPlayer;
-        event.target.textContent = currentPlayer;
-        event.target.classList.add(currentPlayer.toLowerCase());
-
-        event.target.setAttribute("aria-label", `Cell ${index}, ${currentPlayer}`); // announce move via aria label
-        event.target.setAttribute("aria-disabled", "true"); // prevent further interaction
-
-        if (checkWinner() === true) { // check for win or draw after player's move
-            return;
-        }
-
-        currentPlayer = currentPlayer === 'X' ? 'O' : 'X'; // switch to the other player
-        statusText.textContent = `Player ${currentPlayer}'s turn`;
-
-        // Announce status update for screen readers
-        statusText.setAttribute("aria-live", "polite");
-
-        if (mode === "ai" && currentPlayer === "O") { // AI moves only if AI mode is active and it's AI's turn
-            aiTimer = setTimeout(playAiTurn, 500); // short pause so the AI feels like it's thinking
-        }
-    }
-
-    // Accessibility: handle keyboard input
-    function handleKeyPress(event, square, index) {
-        if (event.key === "Enter" || event.key === " ") {
-            if (square && square.textContent === "") {
-                makeMove(event, index);
-            }
-        }
-
-        // Arrow keys move focus around the board, stopping at the edges
-        if (event.key === "ArrowDown" && index < 6) squares[index + 3].focus();
-        if (event.key === "ArrowUp" && index > 2) squares[index - 3].focus();
-        if (event.key === "ArrowRight" && index % 3 !== 2) squares[index + 1].focus();
-        if (event.key === "ArrowLeft" && index % 3 !== 0) squares[index - 1].focus();
-    }
-
-    // Function to reset the game
-    function resetGame() {
-        clearTimeout(aiTimer); // drop an AI move still waiting from the previous game
-
-        board = ["", "", "", "", "", "", "", "", ""];
-        winner = null;
-        currentPlayer = 'X';
-        gameActive = true;
-        statusText.textContent = "Player X's turn";
-        endGameMessage.style.display = "none";
-
-        squares.forEach((square) => {
-            square.textContent = "";
-            square.classList.remove("x", "o", "winning-square"); // clear marks and highlight from the previous game
-            square.setAttribute("aria-label", `Empty cell`);
-            square.removeAttribute("aria-disabled");
-        });
-        squares[0].focus(); // auto focus the first cell after reset
-    }
-
-    // Leave the current game and go back to the main menu, clearing all mode state
-    function returnToMenu() {
-        if (ws) { // leaving an online game: stop listening, and closing tells the server we left
-            ws.onmessage = null;
-            ws.onclose = null;
-            ws.close();
-            ws = null;
-            symbol = null;
-        }
-
-        mode = null;
-        resetGame(); // also cancels a pending AI move
-        playerIndicator.textContent = "";
-        resetButton.style.display = ""; // online mode hides it
-        rematchButton.hidden = true;
-        showMenu(aiButton);
     }
 
     // Show the main menu (hiding every other screen) and move keyboard focus into it
@@ -201,207 +117,222 @@ document.addEventListener("DOMContentLoaded", () => {
         focusTarget.focus();
     }
 
-    // AI Functions
+    function showAiMenu() {
+        applyTheme("ai");
+        menuScreen.style.display = "none";
+        aiModeSelection.style.display = "flex";
+        easyButton.focus();
+    }
+
+    // ---- Game flow (offline and AI) ----
+
+    // Put the state back to an empty board with X to move. Callers render afterwards.
+    function resetBoard() {
+        clearTimeout(aiTimer); // drop an AI move still waiting from the previous game
+        state.board = TicTacToeGame.emptyBoard();
+        state.turn = "X";
+        state.active = true;
+        state.result = null;
+        state.notice = null;
+        state.rematch = "hidden";
+    }
+
+    // The Reset button, and the start of every offline or AI game
+    function restartGame() {
+        resetBoard();
+        render();
+        squares[0].focus();
+    }
+
+    function startOfflineGame() {
+        state.mode = "offline";
+        applyTheme("offline");
+        switchToGame();
+        restartGame();
+    }
+
     function startAIGame(difficulty) {
-        mode = "ai";
-        aiDifficulty = difficulty;
+        state.mode = "ai";
+        state.aiDifficulty = difficulty;
         switchToGame();
-        resetGame();
+        restartGame();
     }
 
-    // The AI's turn: choose a move with the shared game logic, then show it
+    // A player clicked a cell (buttons also click on Enter and Space)
+    function handleCellChoice(index) {
+        if (!state.active || state.board[index] !== "") return;
+        if (state.mode === "online") {
+            sendOnlineMove(index);
+            return;
+        }
+        if (state.mode === "ai" && state.turn === "O") return; // the AI is still thinking
+
+        placeMark(index);
+        if (state.mode === "ai" && state.active) {
+            aiTimer = setTimeout(playAiTurn, 500); // short pause so the AI feels like it's thinking
+        }
+    }
+
+    // Place the current player's mark, then end the game or pass the turn
+    function placeMark(index) {
+        state.board[index] = state.turn;
+        state.result = TicTacToeGame.getResult(state.board);
+        if (state.result) state.active = false;
+        else state.turn = TicTacToeGame.otherSymbol(state.turn);
+        render();
+    }
+
     function playAiTurn() {
-        const move = TicTacToeGame.aiMove(board, aiDifficulty, "O");
-        if (move === -1) return;
-
-        board[move] = "O";
-        const cell = document.getElementById(move);
-        cell.textContent = "O";
-        cell.classList.add("o");
-        cell.setAttribute("aria-label", "AI placed O on cell " + (move + 1));
-
-        if (checkWinner() === true) return; // the AI's move ended the game
-
-        currentPlayer = "X";
-        statusText.textContent = `Player ${currentPlayer}'s turn`;
-        statusText.setAttribute("aria-live", "assertive"); // announce status change
+        const move = TicTacToeGame.aiMove(state.board, state.aiDifficulty, "O");
+        if (move !== -1) placeMark(move);
     }
 
-    // Online PVP mode functions
+    // Arrow keys move focus around the board, stopping at the edges
+    function handleArrowKeys(event, index) {
+        if (event.key === "ArrowDown" && index < 6) squares[index + 3].focus();
+        if (event.key === "ArrowUp" && index > 2) squares[index - 3].focus();
+        if (event.key === "ArrowRight" && index % 3 !== 2) squares[index + 1].focus();
+        if (event.key === "ArrowLeft" && index % 3 !== 0) squares[index - 1].focus();
+    }
+
+    // Leave the current game and go back to the main menu, clearing all mode state
+    function returnToMenu() {
+        if (ws) { // leaving an online game: stop listening, and closing tells the server we left
+            ws.onmessage = null;
+            ws.onclose = null;
+            ws.close();
+            ws = null;
+        }
+        state.mode = null;
+        state.symbol = null;
+        resetBoard(); // also cancels a pending AI move
+        render();
+        showMenu(aiButton);
+    }
+
+    // ---- Online mode ----
+
     function startOnlineGame() {
-        mode = "online";
+        state.mode = "online";
+        state.symbol = null;
+        resetBoard();
+        state.active = false; // no moves until an opponent joins
+        state.notice = "Searching for an opponent...";
+        applyTheme("online");
         switchToGame();
+        render();
 
-        resetButton.style.display = "none"; // reset button is not needed for this mode
-
-        statusText.setAttribute("aria-live", "polite");
-        statusText.textContent = "Searching for an opponent...";
-        gameActive = false; // disable moves until opponent connects
-
-        currentRoom = "gameRoom";
         ws = new WebSocket("ws://localhost:3000");
 
         let connected = false;
         ws.onopen = () => {
             connected = true;
-            ws.send(JSON.stringify({ type: "join", room: currentRoom }));
+            ws.send(JSON.stringify({ type: "join", room: ONLINE_ROOM }));
         };
 
         // Without this a dead or unreachable server would leave the page "searching" forever
         ws.onclose = () => {
-            if (mode !== "online") return; // we left on purpose via the Menu button
-            gameActive = false;
-            rematchButton.hidden = true;
-            statusText.textContent = connected
+            if (state.mode !== "online") return; // we left on purpose via the Menu button
+            state.active = false;
+            state.rematch = "hidden";
+            state.notice = connected
                 ? "Lost connection to the game server."
                 : "Couldn't reach the game server. Is it running?";
-            statusText.setAttribute("aria-live", "polite");
+            render();
         };
 
         ws.onmessage = (event) => {
-            let data = JSON.parse(event.data);
-
-            if (data.type === "assign") { // assign a symbol to the player and notify them about it
-                symbol = data.symbol;
-                playerIndicator.textContent = `You are player: ${symbol}`;
-            }
-
-            if (data.type === "start") { // first game or a rematch: begin from a clean board
-                resetGame();
-                rematchButton.hidden = true;
-                statusText.textContent = symbol === "X"
-                    ? "Game started! You go first."
-                    : "Game started! Your opponent goes first.";
-                statusText.setAttribute("aria-live", "polite");
-            }
-
-            if (data.type === "game_over") {
-                const message = data.winner === "draw" ? "It's a draw!" : `Player ${data.winner} wins!`;
-                showEndGameMessage(message);
-                statusText.textContent = message;
-                statusText.setAttribute("aria-live", "polite");
-
-                // Highlight the winning combination
-                data.winning_combination.forEach(index => {
-                    document.getElementById(index).classList.add("winning-square");
-                    document.getElementById(index).setAttribute("aria-label", `Winning move: Cell ${index + 1}`);
-                });
-
-                gameActive = false;
-                rematchButton.hidden = false;
-                rematchButton.disabled = false;
-            }
-
-            if (data.type === "rematch_requested") {
-                statusText.textContent = "Your opponent wants a rematch!";
-                statusText.setAttribute("aria-live", "polite");
-            }
-
-            if (data.type === "waiting") {
-                statusText.textContent = "Searching for an opponent...";
-            }
-
-            if (data.type === "update") {
-                updateOnlineBoard(data.board);
-                currentPlayer = data.turn;
-                board = data.board;
-                
-                data.board.forEach((square, index) => {
-                    const squareElement = document.getElementById(index);
-                    squareElement.textContent = square || "";
-                    squareElement.setAttribute("aria-label", `Cell ${index + 1}, ${square || 'empty'}`);
-                    squareElement.classList.remove("x", "o");
-                    if (square) {
-                        squareElement.classList.add(square.toLowerCase());
-                    }
-                });
-
-                if (data.turn) { // turn is null once the game is over
-                    statusText.textContent = `Player ${currentPlayer}'s turn`;
-                    statusText.setAttribute("aria-live", "polite");
-                }
-            }
-
-            if (data.type === "full") {
-                endGameMessage.innerText = `Room is currently full!`;
-                endGameMessage.style.display = "block";
-                statusText.textContent = "Room is full!";
-                statusText.setAttribute("aria-live", "polite");
-            }
-
-            if (data.type === "opponent_left") { // fresh board while we wait for someone new
-                resetGame();
-                rematchButton.hidden = true;
-                gameActive = false;
-                statusText.textContent = "Your opponent left. Waiting for a new opponent...";
-                statusText.setAttribute("aria-live", "polite");
-            }
+            handleServerMessage(JSON.parse(event.data));
+            render();
         };
     }
 
-    function onlineMove(index) {
-        if (mode !== "online" || !symbol || currentPlayer !== symbol || gameActive !== true) {
-            return;
+    // Apply one server message to the state (render runs after every message)
+    function handleServerMessage(data) {
+        switch (data.type) {
+            case "assign": // our symbol, at the start and again after a rematch swap
+                state.symbol = data.symbol;
+                break;
+            case "waiting":
+                state.notice = "Searching for an opponent...";
+                break;
+            case "start": // first game or a rematch: begin from a clean board
+                resetBoard();
+                state.notice = state.symbol === "X"
+                    ? "Game started! You go first."
+                    : "Game started! Your opponent goes first.";
+                squares[0].focus();
+                break;
+            case "update":
+                state.board = data.board;
+                if (data.turn) state.turn = data.turn; // turn is null once the game is over
+                state.notice = null;
+                break;
+            case "game_over":
+                state.result = { winner: data.winner, line: data.winning_combination };
+                state.active = false;
+                state.notice = null;
+                state.rematch = "available";
+                break;
+            case "rematch_requested":
+                state.notice = "Your opponent wants a rematch!";
+                break;
+            case "full":
+                state.active = false;
+                state.notice = "Room is full! Try again later.";
+                break;
+            case "opponent_left": // fresh board while we wait for someone new
+                resetBoard();
+                state.active = false;
+                state.notice = "Your opponent left. Waiting for a new opponent...";
+                break;
         }
-        if (board[index] !== "") { 
-            return;
-        }
+    }
 
-        // Make the move
-        board[index] = symbol;
-        document.getElementById(index).textContent = symbol;
-        document.getElementById(index).classList.add(symbol.toLowerCase());
-
-        // Send move to server
-        ws.send(JSON.stringify({ type: "move", room: currentRoom, index: index, symbol: symbol }));
+    function sendOnlineMove(index) {
+        if (state.turn !== state.symbol || !ws || ws.readyState !== WebSocket.OPEN) return;
+        state.board[index] = state.symbol; // draw our move straight away
+        render();
+        ws.send(JSON.stringify({ type: "move", room: ONLINE_ROOM, index, symbol: state.symbol }));
     }
 
     // Ask the server for a rematch; the game restarts once both players have asked
     function requestRematch() {
-        if (!ws) return;
+        if (!ws || state.rematch !== "available") return;
         ws.send(JSON.stringify({ type: "rematch" }));
-        rematchButton.disabled = true;
-        statusText.textContent = "Waiting for your opponent to accept the rematch...";
-        statusText.setAttribute("aria-live", "polite");
+        state.rematch = "requested";
+        state.notice = "Waiting for your opponent to accept the rematch...";
+        render();
     }
 
-    function updateOnlineBoard(boardState) {
-        board = boardState;
-        for (let i = 0; i < 9; i++) {
-            document.getElementById(i).textContent = board[i] || "";
-        }
-    }
+    // ---- Leaderboard ----
 
-    // Leaderboard: show the screen, then fill it with the online results from the server
+    // Show the screen, then fill it with the online results from the server
     function displayLeaderboard() {
         menuScreen.style.display = "none";
         leaderboardScreen.style.display = "flex";
         leaderboardScreen.setAttribute("tabindex", "-1"); // focusable from script only
         leaderboardScreen.focus();
 
-        fetch('http://localhost:3000/leaderboard')
-        .then(response => response.json())
-        .then(rows => {
-            leaderboardList.replaceChildren();
-            const wins = rows.filter(row => row.winner !== "draw");
-            const draws = rows.find(row => row.winner === "draw");
-
-            if (rows.length === 0) {
-                addLeaderboardRow("No online games played yet", "");
-                return;
-            }
-            wins.forEach(row => {
-                addLeaderboardRow(`Player ${row.winner}`, `${row.wins} ${row.wins === 1 ? "win" : "wins"}`);
+        fetch("http://localhost:3000/leaderboard")
+            .then((response) => response.json())
+            .then((rows) => {
+                leaderboardList.replaceChildren();
+                if (rows.length === 0) {
+                    addLeaderboardRow("No online games played yet", "");
+                    return;
+                }
+                rows.filter((row) => row.winner !== "draw").forEach((row) => {
+                    addLeaderboardRow(`Player ${row.winner}`, `${row.wins} ${row.wins === 1 ? "win" : "wins"}`);
+                });
+                const draws = rows.find((row) => row.winner === "draw");
+                if (draws) addLeaderboardRow("Draws", String(draws.wins));
+            })
+            .catch((error) => {
+                console.error("Error fetching leaderboard:", error);
+                leaderboardList.replaceChildren();
+                addLeaderboardRow("Couldn't reach the server", "");
             });
-            if (draws) {
-                addLeaderboardRow("Draws", String(draws.wins));
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching leaderboard:', error);
-            leaderboardList.replaceChildren();
-            addLeaderboardRow("Couldn't reach the server", "");
-        });
     }
 
     // One leaderboard line: a label on the left and a value on the right
@@ -415,15 +346,25 @@ document.addEventListener("DOMContentLoaded", () => {
         leaderboardList.appendChild(item);
     }
 
-    // Event listeners
+    // ---- Event listeners (attached once) ----
     squares.forEach((square, index) => {
-        square.addEventListener("click", (event) => makeMove(event, index));
-        square.addEventListener("keydown", (event) => handleKeyPress(event, square, index));
+        square.addEventListener("click", () => handleCellChoice(index));
+        square.addEventListener("keydown", (event) => handleArrowKeys(event, index));
     });
 
-    resetButton.addEventListener('click', resetGame);
-    menuButton.addEventListener('click', returnToMenu);
-    rematchButton.addEventListener('click', requestRematch);
-    aiBackButton.addEventListener('click', () => showMenu(aiButton));
-    leaderboardBackButton.addEventListener('click', () => showMenu(leaderboardButton));
+    offlineButton.addEventListener("click", startOfflineGame);
+    aiButton.addEventListener("click", showAiMenu);
+    easyButton.addEventListener("click", () => startAIGame("easy"));
+    mediumButton.addEventListener("click", () => startAIGame("medium"));
+    impossibleButton.addEventListener("click", () => startAIGame("impossible"));
+    onlineButton.addEventListener("click", startOnlineGame);
+    leaderboardButton.addEventListener("click", displayLeaderboard);
+
+    resetButton.addEventListener("click", restartGame);
+    menuButton.addEventListener("click", returnToMenu);
+    rematchButton.addEventListener("click", requestRematch);
+    aiBackButton.addEventListener("click", () => showMenu(aiButton));
+    leaderboardBackButton.addEventListener("click", () => showMenu(leaderboardButton));
+
+    render();
 });
