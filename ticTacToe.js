@@ -211,6 +211,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ---- Online mode ----
+    // The server owns the online board. We only send requests; the board on screen
+    // changes when the server's "update" message comes back.
 
     function startOnlineGame() {
         state.mode = "online";
@@ -291,9 +293,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function sendOnlineMove(index) {
         if (state.turn !== state.symbol || !ws || ws.readyState !== WebSocket.OPEN) return;
-        state.board[index] = state.symbol; // draw our move straight away
-        render();
-        ws.send(JSON.stringify({ type: "move", room: ONLINE_ROOM, index, symbol: state.symbol }));
+        ws.send(JSON.stringify({ type: "move", index }));
     }
 
     // Ask the server for a rematch; the game restarts once both players have asked
