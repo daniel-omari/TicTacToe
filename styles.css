@@ -263,8 +263,13 @@ body {
     border-radius: 12px;
     cursor: pointer;
     transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+    -webkit-tap-highlight-color: transparent; /* no grey flash on tap; the cell has its own feedback */
+    touch-action: manipulation;               /* fast taps place marks instead of zooming the page */
 }
-.square:active {
+/* Press feedback on empty cells only. Once a mark lands the pop-in animation takes over;
+   on phones the press state lingers after a tap, and shrinking a filled cell again as the
+   animation finished made every move look like a double tap. */
+.square:active:not(.x):not(.o) {
     transform: scale(0.95);
 }
 .square:focus-visible {
@@ -426,7 +431,7 @@ body {
     #reset:hover,
     #menu:hover,
     #rematch:hover,
-    .square:active {
+    .square:active:not(.x):not(.o) {
         transform: none;
     }
 }
