@@ -18,6 +18,14 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const ONLINE_ROOM = "gameRoom";
+
+    // Where the game server is. When the server hosts this page, talk to the same origin
+    // (wss:// on https). Opened straight from a file, fall back to a local server.
+    const servedFromFile = location.protocol === "file:";
+    const SERVER_HTTP = servedFromFile ? "http://localhost:3000" : "";
+    const SERVER_WS = servedFromFile
+        ? "ws://localhost:3000"
+        : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
     let aiTimer = null; // pending AI move, so a reset or leaving the game can cancel it
     let ws = null;      // connection to the game server while in online mode
 
@@ -244,7 +252,7 @@ document.addEventListener("DOMContentLoaded", () => {
         switchToGame();
         render();
 
-        ws = new WebSocket("ws://localhost:3000");
+        ws = new WebSocket(SERVER_WS);
 
         let connected = false;
         ws.onopen = () => {
@@ -334,7 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
         leaderboardScreen.setAttribute("tabindex", "-1"); // focusable from script only
         leaderboardScreen.focus();
 
-        fetch("http://localhost:3000/leaderboard")
+        fetch(`${SERVER_HTTP}/leaderboard`)
             .then((response) => response.json())
             .then((rows) => {
                 leaderboardList.replaceChildren();

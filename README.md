@@ -93,17 +93,18 @@ Accessibility was a first-class goal rather than an afterthought:
 
 ## Running
 
-Local and versus-AI play need no server: just open `index.html` in a browser.
-
-For online multiplayer and the leaderboard, start the server (needs Node.js 22.13 or newer):
+Start the server (needs Node.js 22.13 or newer):
 
 ```bash
 npm install     # installs express, ws and cors (plus ESLint for development)
-npm start       # starts the server on port 3000
+npm start       # serves the game on http://localhost:3000 (set PORT to change it)
 ```
 
-Then open `index.html` in two browser tabs or on two machines and choose Play Online. The
-server creates `tic_tac_toe.db` automatically on first run.
+Then open http://localhost:3000 in two browser tabs or on two machines and choose Play
+Online. The server hosts the page itself and the browser connects back to the same address,
+so the same build works locally and when deployed. It creates `tic_tac_toe.db` on first run.
+
+Local and versus-AI play also work without a server: just open `index.html` in a browser.
 
 ## Testing
 

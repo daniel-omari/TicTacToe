@@ -210,3 +210,16 @@ test("the leaderboard endpoint returns the recorded results", async () => {
     assert.ok(rows.some((row) => row.winner === "X" && row.wins >= 1));
     x.close(); o.close();
 });
+
+test("the server hosts the game page, and nothing else from the project folder", async () => {
+    const page = await fetch(`http://${baseUrl}/`);
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /<title>Tic-Tac-Toe<\/title>/);
+
+    for (const file of ["game.js", "ticTacToe.js", "styles.css"]) {
+        assert.equal((await fetch(`http://${baseUrl}/${file}`)).status, 200, file);
+    }
+    for (const file of ["server.js", "package.json", "tic_tac_toe.db", ".gitignore", "test/server.test.js"]) {
+        assert.equal((await fetch(`http://${baseUrl}/${file}`)).status, 404, file);
+    }
+});

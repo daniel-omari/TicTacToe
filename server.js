@@ -3,11 +3,13 @@
 
 const WebSocket = require('ws');
 const http = require('http');
+const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const TicTacToeGame = require('./game.js');
 
 const express = require('express');
 const app = express();
+app.disable('x-powered-by');
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -211,6 +213,14 @@ wss.on('connection', (ws) => {
         safeSend(remaining, { type: "opponent_left" });
         safeSend(remaining, { type: "assign", symbol: "X" });
     });
+});
+
+// The game page itself, so one server hosts everything. Only these files are public;
+// everything else in the folder (server code, the database, package files) stays private.
+const PUBLIC_FILES = ['index.html', 'styles.css', 'game.js', 'ticTacToe.js'];
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+PUBLIC_FILES.forEach((file) => {
+    app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
 });
 
 // Win tally per symbol (X, O and draws).
