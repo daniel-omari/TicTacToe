@@ -266,28 +266,32 @@ body {
     -webkit-tap-highlight-color: transparent; /* no grey flash on tap; the cell has its own feedback */
     touch-action: manipulation;               /* fast taps place marks instead of zooming the page */
 }
-/* Press feedback on empty cells only. Once a mark lands the pop-in animation takes over;
-   on phones the press state lingers after a tap, and shrinking a filled cell again as the
-   animation finished made every move look like a double tap. */
-.square:active:not(.x):not(.o) {
-    transform: scale(0.95);
+/* On touch screens a tap gets no press shrink and no transitions: the press and the
+   pop-in played back to back and made every move look like a double tap (tested on an
+   iPhone). Mouse users keep the press feedback, see the hover section below. */
+@media (hover: none) {
+    .square {
+        transition: none;
+    }
 }
 .square:focus-visible {
     outline: 3px solid #ffcc00; /* visible focus for keyboard users */
     outline-offset: 2px;
 }
 
+/* The X/O glow scales with the cell, so it stays as subtle on a phone as on a desktop
+   (2px offset and 10px blur on the largest, 150px cells). */
+.square {
+    --mark-shadow: calc(var(--cell) / 75) calc(var(--cell) / 75) calc(var(--cell) / 15);
+}
 .square.x {
     color: #ff4d4d;
-    text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
+    text-shadow: var(--mark-shadow) rgba(255, 0, 0, 0.8);
+    animation: pop-in 0.2s ease-out;
 }
 .square.o {
     color: #3399ff;
-    text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
-}
-/* Only the symbol pops in; the cell itself stays still */
-.square .mark {
-    display: inline-block;
+    text-shadow: var(--mark-shadow) rgba(0, 0, 255, 0.8);
     animation: pop-in 0.2s ease-out;
 }
 
@@ -364,6 +368,9 @@ body {
         background: #333;
         border-color: #333;
     }
+    .square:active {
+        transform: scale(0.95);
+    }
     .square:hover {
         background-color: #00ee77;
         box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.3);
@@ -422,7 +429,8 @@ body {
 /* OS "reduce motion" setting: keep colour, glow and fade feedback, but drop
    the movement (scaling, popping and the endless pulse). */
 @media (prefers-reduced-motion: reduce) {
-    .square .mark {
+    .square.x,
+    .square.o {
         animation-name: fade-in;
     }
     .winning-square {
@@ -433,7 +441,7 @@ body {
     #reset:hover,
     #menu:hover,
     #rematch:hover,
-    .square:active:not(.x):not(.o) {
+    .square:active {
         transform: none;
     }
 }

@@ -65,7 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
         squares.forEach((square, index) => {
             const mark = state.board[index];
             const winning = winningLine.includes(index);
-            if (square.textContent !== mark) square.replaceChildren(markElement(mark));
+            if (square.textContent !== mark) square.textContent = mark;
             square.classList.toggle("x", mark === "X");
             square.classList.toggle("o", mark === "O");
             square.classList.toggle("winning-square", winning);
@@ -87,15 +87,6 @@ document.addEventListener("DOMContentLoaded", () => {
         resetButton.hidden = state.mode === "online"; // online games restart with Rematch instead
         rematchButton.hidden = state.rematch === "hidden";
         rematchButton.disabled = state.rematch === "requested";
-    }
-
-    // A placed X or O in its own element, so the symbol can pop in while the cell stays put
-    function markElement(mark) {
-        if (!mark) return "";
-        const span = document.createElement("span");
-        span.className = "mark";
-        span.textContent = mark;
-        return span;
     }
 
     // The line under the board: a one-off notice, the result, or whose turn it is
