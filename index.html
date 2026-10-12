@@ -21,9 +21,10 @@
     <div id="ai-mode-selection" style="display: none;">
         <h2 class="glow-title" data-text="Play VS AI">Play VS AI</h2>
         <p class="screen-subtitle">Choose a difficulty:</p>
-        <button class="menu-button" id="aiEasy">Naive <span class="hint">Picks random moves</span></button>
-        <button class="menu-button" id="aiMedium">Intermediate <span class="hint">Sharp, but beatable</span></button>
-        <button class="menu-button" id="aiHard">Advanced <span class="hint">Never loses</span></button>
+        <button class="menu-button" id="aiNaive" data-difficulty="naive">Naive <span class="hint">Often misses the best move</span></button>
+        <button class="menu-button" id="aiIntermediate" data-difficulty="intermediate">Intermediate <span class="hint">Takes wins, usually blocks</span></button>
+        <button class="menu-button" id="aiAdvanced" data-difficulty="advanced">Advanced <span class="hint">Strong, but sometimes misses a fork</span></button>
+        <button class="menu-button" id="aiUnbeatable" data-difficulty="unbeatable">Unbeatable <span class="hint">Never loses</span></button>
         <button class="back-button" id="aiBack">Back</button>
     </div>
 

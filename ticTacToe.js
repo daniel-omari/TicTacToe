@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
         active: true,         // false before an online game starts and once a game is over
         result: null,         // TicTacToeGame.getResult() once the game is over
         notice: null,         // one-off status message shown instead of "Player X's turn"
-        aiDifficulty: "easy",
+        aiDifficulty: "naive",
         symbol: null,         // online only: the symbol the server gave us
         rematch: "hidden",    // online only: "hidden", "available" or "requested"
     };
@@ -38,9 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const leaderboardBackButton = document.getElementById("leaderboardBack");
     const aiButton = document.getElementById("ai");
     const aiModeSelection = document.getElementById("ai-mode-selection");
-    const easyButton = document.getElementById("aiEasy");
-    const mediumButton = document.getElementById("aiMedium");
-    const impossibleButton = document.getElementById("aiHard");
+    const difficultyButtons = document.querySelectorAll("[data-difficulty]");
     const aiBackButton = document.getElementById("aiBack");
 
     // ---- Rendering ----
@@ -121,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
         applyTheme("ai");
         menuScreen.style.display = "none";
         aiModeSelection.style.display = "flex";
-        easyButton.focus();
+        difficultyButtons[0].focus();
     }
 
     // ---- Game flow (offline and AI) ----
@@ -354,9 +352,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     offlineButton.addEventListener("click", startOfflineGame);
     aiButton.addEventListener("click", showAiMenu);
-    easyButton.addEventListener("click", () => startAIGame("easy"));
-    mediumButton.addEventListener("click", () => startAIGame("medium"));
-    impossibleButton.addEventListener("click", () => startAIGame("impossible"));
+    difficultyButtons.forEach((button) => {
+        button.addEventListener("click", () => startAIGame(button.dataset.difficulty));
+    });
     onlineButton.addEventListener("click", startOnlineGame);
     leaderboardButton.addEventListener("click", displayLeaderboard);
 

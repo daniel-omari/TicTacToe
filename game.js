@@ -46,18 +46,20 @@ const TicTacToeGame = (() => {
     // Minimax with alpha-beta pruning, scored from aiSymbol's point of view. Faster wins
     // and slower losses score higher, so the AI finishes quickly and resists longest.
     // Plays moves in place and undoes them, instead of copying the board at every node.
-    function minimax(board, depth, isAiTurn, alpha, beta, aiSymbol) {
+    // maxDepth limits how far ahead it looks; positions past that count as 0 (unknown).
+    function minimax(board, depth, isAiTurn, alpha, beta, aiSymbol, maxDepth) {
         const result = getResult(board);
         if (result) {
             if (result.winner === aiSymbol) return 10 - depth;
             if (result.winner === "draw") return 0;
             return depth - 10;
         }
+        if (depth >= maxDepth) return 0;
 
         let best = isAiTurn ? -Infinity : Infinity;
         for (const index of emptyCells(board)) {
             board[index] = isAiTurn ? aiSymbol : otherSymbol(aiSymbol);
-            const score = minimax(board, depth + 1, !isAiTurn, alpha, beta, aiSymbol);
+            const score = minimax(board, depth + 1, !isAiTurn, alpha, beta, aiSymbol, maxDepth);
             board[index] = "";
 
             if (isAiTurn) {
@@ -72,41 +74,97 @@ const TicTacToeGame = (() => {
         return best;
     }
 
-    // The strongest move for aiSymbol: a full search, so it never loses. Ties go to the
-    // lowest index. Returns -1 if the board is full.
-    function bestMove(board, aiSymbol) {
+    // Every move that scores best for aiSymbol. Each one is searched with a full
+    // alpha-beta window, so the scores are exact and ties are real ties. With no
+    // maxDepth this is a full search, and any of these moves is safe to play.
+    function bestMoves(board, aiSymbol, maxDepth = Infinity) {
         const work = [...board]; // never mutate the caller's board
-        let bestIndex = -1;
+        let moves = [];
         let bestScore = -Infinity;
         for (const index of emptyCells(work)) {
             work[index] = aiSymbol;
-            const score = minimax(work, 0, false, -Infinity, Infinity, aiSymbol);
+            const score = minimax(work, 0, false, -Infinity, Infinity, aiSymbol, maxDepth);
             work[index] = "";
             if (score > bestScore) {
                 bestScore = score;
-                bestIndex = index;
+                moves = [index];
+            } else if (score === bestScore) {
+                moves.push(index);
             }
         }
-        return bestIndex;
+        return moves;
+    }
+
+    // A random item from a list, or -1 if the list is empty
+    function pick(list, rng) {
+        return list.length ? list[Math.floor(rng() * list.length)] : -1;
+    }
+
+    // One of the best moves for aiSymbol, ties broken at random so games don't repeat.
+    // Returns -1 if the board is full.
+    function bestMove(board, aiSymbol, rng = Math.random, maxDepth = Infinity) {
+        return pick(bestMoves(board, aiSymbol, maxDepth), rng);
     }
 
     // A random empty cell, or -1 if the board is full
     function randomMove(board, rng = Math.random) {
-        const cells = emptyCells(board);
-        return cells.length ? cells[Math.floor(rng() * cells.length)] : -1;
+        return pick(emptyCells(board), rng);
     }
 
-    // The AI's move for a difficulty:
-    //   "easy"       random
-    //   "medium"     the best move about 70% of the time, otherwise random
-    //   "impossible" always the best move
+    // Cells where symbol would complete a line right now
+    function winningMoves(board, symbol) {
+        const work = [...board];
+        return emptyCells(work).filter((index) => {
+            work[index] = symbol;
+            const won = getResult(work)?.winner === symbol;
+            work[index] = "";
+            return won;
+        });
+    }
+
+    // The squares a decent player reaches for first: the centre and the corners. Narrows
+    // a list of candidate moves to those, or leaves it alone if it has none.
+    function strongSquares(candidates) {
+        const strong = candidates.filter((index) => [0, 2, 4, 6, 8].includes(index));
+        return strong.length ? strong : candidates;
+    }
+
+    const DIFFICULTIES = Object.freeze(["naive", "intermediate", "advanced", "unbeatable"]);
+
+    // The AI's move at each difficulty. The levels differ in what the AI notices, not
+    // just in how often it slips:
+    //   "naive"         the best move about 60% of the time, otherwise random (so it can
+    //                   miss wins and blocks)
+    //   "intermediate"  always takes a win, blocks about 80% of the time, otherwise the
+    //                   centre or a corner with no lookahead (it walks into forks)
+    //   "advanced"      always wins and blocks, and plays the perfect move about 70% of
+    //                   the time. Otherwise it overlooks something deeper, like a fork two
+    //                   moves away, and plays any move. Never an obvious blunder, but
+    //                   beatable from either side, like a strong human.
+    //   "unbeatable"    full minimax search, never loses
     // rng can be swapped for a fixed sequence so tests get predictable "randomness".
-    function aiMove(board, difficulty, aiSymbol = "O", rng = Math.random) {
-        if (difficulty === "easy") return randomMove(board, rng);
-        if (difficulty === "medium") {
-            return rng() < 0.7 ? bestMove(board, aiSymbol) : randomMove(board, rng);
+    function aiMove(board, difficulty, aiSymbol, rng = Math.random) {
+        if (getResult(board)) return -1; // the game is already over
+
+        if (difficulty === "naive") {
+            return rng() < 0.6 ? bestMove(board, aiSymbol, rng) : randomMove(board, rng);
         }
-        return bestMove(board, aiSymbol);
+        if (difficulty === "unbeatable") return bestMove(board, aiSymbol, rng);
+        if (difficulty !== "intermediate" && difficulty !== "advanced") {
+            throw new Error(`Unknown difficulty: ${difficulty}`);
+        }
+
+        const wins = winningMoves(board, aiSymbol);
+        if (wins.length) return pick(wins, rng);
+        const blocks = winningMoves(board, otherSymbol(aiSymbol));
+
+        if (difficulty === "intermediate") {
+            if (blocks.length && rng() < 0.8) return pick(blocks, rng);
+            return pick(strongSquares(emptyCells(board)), rng);
+        }
+        if (blocks.length) return pick(blocks, rng);
+        if (rng() < 0.3) return randomMove(board, rng); // missed something this time
+        return pick(strongSquares(bestMoves(board, aiSymbol)), rng);
     }
 
     return Object.freeze({
@@ -115,8 +173,11 @@ const TicTacToeGame = (() => {
         emptyBoard,
         emptyCells,
         getResult,
+        bestMoves,
         bestMove,
         randomMove,
+        winningMoves,
+        DIFFICULTIES,
         aiMove,
     });
 })();

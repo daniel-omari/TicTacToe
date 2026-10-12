@@ -105,10 +105,10 @@ body {
 }
 
 #ai { background: linear-gradient(135deg, #FFD700, #FF8C00); }
-#online, #aiMedium { background: linear-gradient(135deg, #33B5E5, #0099CC); }
-#offline, #aiEasy { background: linear-gradient(135deg, #00C851, #007E33); }
-#viewLeaderboard { background: linear-gradient(135deg, #7733e5, #4e00cc); }
-#aiHard { background: linear-gradient(135deg, #FF4081, #D50000); }
+#online, #aiIntermediate { background: linear-gradient(135deg, #33B5E5, #0099CC); }
+#offline, #aiNaive { background: linear-gradient(135deg, #00C851, #007E33); }
+#viewLeaderboard, #aiAdvanced { background: linear-gradient(135deg, #7733e5, #4e00cc); }
+#aiUnbeatable { background: linear-gradient(135deg, #FF4081, #D50000); }
 
 /* The difficulty options are the main event on their screen, so make them taller */
 #ai-mode-selection .menu-button {
