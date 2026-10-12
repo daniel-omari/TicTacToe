@@ -2,7 +2,8 @@
 // Integration tests for the game server: a real server on a random free port, real
 // WebSocket clients, and a throwaway in-memory database.
 
-process.env.DB_PATH = ":memory:"; // must be set before server.js is loaded
+process.env.DB_PATH = ":memory:";   // must be set before server.js is loaded
+process.env.HEARTBEAT_MS = "100";    // fast pings, so a vanished player is noticed quickly
 
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
@@ -25,9 +26,9 @@ after(() => new Promise((resolve) => {
 }));
 
 // A connected test player that records everything the server sends it
-function connect() {
+function connect(options) {
     return new Promise((resolve, reject) => {
-        const ws = new WebSocket(`ws://${baseUrl}`);
+        const ws = new WebSocket(`ws://${baseUrl}`, options);
         ws.messages = [];
         ws.waiters = [];
         ws.symbol = null;
@@ -283,4 +284,24 @@ test("the server hosts the game page, and nothing else from the project folder",
     for (const file of ["server.js", "package.json", "tic_tac_toe.db", ".gitignore", "test/server.test.js"]) {
         assert.equal((await fetch(`http://${baseUrl}/${file}`)).status, 404, file);
     }
+});
+
+test("a player who vanishes without closing (no ping replies) loses their seat", async () => {
+    const [host, code] = await createRoom();
+    const ghost = await connect({ autoPong: false });       // like a dropped network: goes silent
+    const started = next(host, "start");
+    send(ghost, { type: "join", code });
+    await started;
+
+    const left = next(host, "opponent_left");               // after a missed ping or two
+    await left;
+    assert.equal(host.symbol, "X");
+    host.close();
+});
+
+test("oversized messages are refused", async () => {
+    const player = await connect();
+    const closed = new Promise((resolve) => player.on("close", (code) => resolve(code)));
+    send(player, { type: "join", code: "A".repeat(2000) });
+    assert.equal(await closed, 1009);                       // 1009 = message too big
 });

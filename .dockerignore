@@ -1,0 +1,9 @@
+# Keep the image to what the server needs at runtime
+node_modules
+npm-debug.log*
+.git
+.github
+test
+*.db
+*.db-journal
+.env

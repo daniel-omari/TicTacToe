@@ -13,7 +13,8 @@ const app = express();
 app.disable('x-powered-by');
 
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+// Game messages are tiny, so refuse anything over 1 KB instead of parsing it.
+const wss = new WebSocket.Server({ server, maxPayload: 1024 });
 
 const cors = require('cors');
 app.use(cors());
@@ -204,7 +205,35 @@ function handleRematch(ws) {
     });
 }
 
+// Ping every player regularly. Hosting proxies close connections that sit idle, and a
+// player whose network drops never sends a close frame, so their seat would stay taken.
+// Anyone who didn't answer the previous ping is disconnected, which frees the seat.
+const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS) || 30000;
+const heartbeat = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (!ws.isAlive) {
+            ws.terminate();
+            return;
+        }
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, HEARTBEAT_MS);
+heartbeat.unref(); // never keep the process alive on its own
+wss.on('close', () => clearInterval(heartbeat));
+
 wss.on('connection', (ws) => {
+    ws.isAlive = true;
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
+
+    // Socket-level errors (like an oversized message) close that connection. Without a
+    // listener, Node would treat them as uncaught and take the whole server down.
+    ws.on('error', (err) => {
+        console.error("Connection error:", err.message);
+    });
+
     ws.on('message', (message) => {
         // A malformed frame must never take the server down.
         let data;

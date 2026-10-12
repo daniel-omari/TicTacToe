@@ -1,3 +1,15 @@
+---
+title: Tic-Tac-Toe
+emoji: ⭕
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 7860
+license: mit
+pinned: false
+short_description: Tic-Tac-Toe with a 4-level AI and online rooms
+---
+
 # Tic-Tac-Toe
 
 [![CI](https://github.com/daniel-omari/TicTacToe/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel-omari/TicTacToe/actions/workflows/ci.yml)
@@ -111,6 +123,21 @@ so the same build works locally and when deployed. It creates `tic_tac_toe.db` o
 
 Local and versus-AI play also work without a server: just open `index.html` in a browser.
 
+## Deploying
+
+The `Dockerfile` builds one small image that serves everything on port 7860:
+
+```bash
+docker build -t tic-tac-toe .
+docker run -p 7860:7860 tic-tac-toe     # then open http://localhost:7860
+```
+
+The live demo runs this image on a free Hugging Face Docker Space (the block at the top of
+this README is the Space's configuration). The browser connects back to whatever address
+served the page, over `wss://` on HTTPS, so no URLs need changing. The server pings every
+player every 30 seconds, which keeps connections open through the host's proxy and frees
+the seat of anyone whose connection silently dropped.
+
 ## Testing
 
 ```bash
@@ -132,4 +159,5 @@ GitHub Actions runs linting, the tests and `npm audit` on Node 22 and 24 for eve
 ## Notes
 
 This is a hobby project. There are no accounts, so the leaderboard counts wins by symbol
-(X, O and draws) rather than by player.
+(X, O and draws) rather than by player. The free host has no persistent disk, so the live demo's
+leaderboard starts from zero whenever the Space restarts.
