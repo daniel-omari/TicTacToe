@@ -208,8 +208,8 @@ function handleRematch(ws) {
 // Ping every player regularly. Hosting proxies close connections that sit idle, and a
 // player whose network drops never sends a close frame, so their seat would stay taken.
 // Anyone who didn't answer the previous ping is disconnected, which frees the seat.
-const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS) || 30000;
-const heartbeat = setInterval(() => {
+const HEARTBEAT_MS = 30000;
+function checkConnections() {
     wss.clients.forEach((ws) => {
         if (!ws.isAlive) {
             ws.terminate();
@@ -218,7 +218,8 @@ const heartbeat = setInterval(() => {
         ws.isAlive = false;
         ws.ping();
     });
-}, HEARTBEAT_MS);
+}
+const heartbeat = setInterval(checkConnections, HEARTBEAT_MS);
 heartbeat.unref(); // never keep the process alive on its own
 wss.on('close', () => clearInterval(heartbeat));
 
@@ -301,4 +302,4 @@ if (require.main === module) {
     server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
-module.exports = { server, wss };
+module.exports = { server, wss, checkConnections };

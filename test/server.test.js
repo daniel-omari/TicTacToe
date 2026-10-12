@@ -2,13 +2,12 @@
 // Integration tests for the game server: a real server on a random free port, real
 // WebSocket clients, and a throwaway in-memory database.
 
-process.env.DB_PATH = ":memory:";   // must be set before server.js is loaded
-process.env.HEARTBEAT_MS = "100";    // fast pings, so a vanished player is noticed quickly
+process.env.DB_PATH = ":memory:"; // must be set before server.js is loaded
 
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const WebSocket = require("ws");
-const { server, wss } = require("../server.js");
+const { server, wss, checkConnections } = require("../server.js");
 
 let baseUrl;
 
@@ -293,15 +292,25 @@ test("a player who vanishes without closing (no ping replies) loses their seat",
     send(ghost, { type: "join", code });
     await started;
 
-    const left = next(host, "opponent_left");               // after a missed ping or two
+    // Run the heartbeat by hand (it normally runs every 30 seconds): ping everyone, give
+    // live players time to answer, then check again. Only the silent one is dropped.
+    const left = next(host, "opponent_left");
+    checkConnections();
+    await pause(300);
+    checkConnections();
     await left;
     assert.equal(host.symbol, "X");
     host.close();
 });
 
-test("oversized messages are refused", async () => {
+test("an oversized message closes only that connection, not the server", async () => {
     const player = await connect();
-    const closed = new Promise((resolve) => player.on("close", (code) => resolve(code)));
+    const closed = new Promise((resolve) => player.on("close", resolve));
     send(player, { type: "join", code: "A".repeat(2000) });
-    assert.equal(await closed, 1009);                       // 1009 = message too big
+    await closed;
+
+    const [x, o] = await startGame();                       // the server carries on
+    const update = await move(x, o, 4);
+    assert.equal(update.board[4], "X");
+    x.close(); o.close();
 });
