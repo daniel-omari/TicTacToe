@@ -12,27 +12,35 @@ real-time multiplayer.
 ## Game modes
 
 - **Local (offline):** two players share one keyboard and mouse on the same board.
-- **Versus AI:** play the computer at one of three difficulty levels (Naive, Intermediate,
-  Advanced).
+- **Versus AI:** play the computer at one of four difficulty levels (Naive, Intermediate,
+  Advanced, Unbeatable).
 - **Online:** two browsers join the same room and play in real time, with the server
   acting as the source of truth for the board and recording the result.
 - **Leaderboard:** a running tally of wins by symbol, served from the database.
 
 ## The AI
 
-The AI is built on the minimax algorithm with alpha-beta pruning, and the difficulty
-levels change how strictly it follows the optimal strategy:
+The levels differ in what the AI notices, not in how often it throws the game on purpose:
 
-- **Naive** moves randomly among the empty cells.
-- **Intermediate** plays the optimal minimax move about 70% of the time and a random move
-  otherwise, so it is beatable but not a pushover.
-- **Advanced** runs a full minimax search on every move, which makes it effectively
-  unbeatable (the best a human can manage is a draw).
+- **Naive** plays the best move about 60% of the time and a random move otherwise.
+- **Intermediate** always takes a win and blocks about 80% of the time; otherwise it takes
+  the centre or a corner with no lookahead, so it walks into forks.
+- **Advanced** plays like a strong human: it never misses a win or a block, and plays the
+  perfect move about 70% of the time. Otherwise it overlooks something deeper, like a fork
+  two moves away. It never makes an obvious blunder, but it can be beaten from either side.
+- **Unbeatable** runs a full minimax search with alpha-beta pruning on every move. The
+  best a human can manage is a draw.
 
-Minimax scores each terminal position (a win for the AI, a win for the player, or a draw)
+At every level, ties between equally good moves are broken at random, so games don't
+repeat. Players swap symbols after every finished game (X always moves first), so you
+take turns opening against the AI.
+
+Minimax scores each finished position (a win for the AI, a win for the player, or a draw)
 and backs those scores up the game tree, picking the move that maximises its worst-case
-outcome. Alpha-beta pruning discards branches that cannot affect the final choice, which
-cuts the search work without changing the result.
+outcome. Faster wins score higher, so it finishes games quickly. Alpha-beta pruning skips
+branches that cannot change the choice. The test suite proves Unbeatable never loses by
+playing out every possible game against it, as X and as O, including every tie it might
+pick.
 
 ## Online multiplayer
 

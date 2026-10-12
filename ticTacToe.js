@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
         result: null,         // TicTacToeGame.getResult() once the game is over
         notice: null,         // one-off status message shown instead of "Player X's turn"
         aiDifficulty: "naive",
+        player1: "X",         // Player 1's symbol (in AI mode, the human). Swaps after every finished game.
         symbol: null,         // online only: the symbol the server gave us
         rematch: "hidden",    // online only: "hidden", "available" or "requested"
     };
@@ -68,9 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 : `Player ${state.result.winner} WINS!`;
         }
 
-        playerIndicator.textContent = state.mode === "online" && state.symbol
-            ? `You are player: ${state.symbol}`
-            : "";
+        playerIndicator.textContent = playerMessage();
         resetButton.hidden = state.mode === "online"; // online games restart with Rematch instead
         rematchButton.hidden = state.rematch === "hidden";
         rematchButton.disabled = state.rematch === "requested";
@@ -83,6 +82,16 @@ document.addEventListener("DOMContentLoaded", () => {
             return state.result.winner === "draw" ? "It's a draw!" : `Player ${state.result.winner} wins!`;
         }
         return `Player ${state.turn}'s turn`;
+    }
+
+    // The line above the status: who is playing which symbol
+    function playerMessage() {
+        if (state.mode === "online") return state.symbol ? `You are player: ${state.symbol}` : "";
+        if (state.mode === "ai") return `You are player: ${state.player1}`;
+        if (state.mode === "offline") {
+            return `Player 1 is ${state.player1}, Player 2 is ${TicTacToeGame.otherSymbol(state.player1)}`;
+        }
+        return "";
     }
 
     // What a screen reader announces for one cell, e.g. "Cell 5, X, winning line"
@@ -135,15 +144,19 @@ document.addEventListener("DOMContentLoaded", () => {
         state.rematch = "hidden";
     }
 
-    // The Reset button, and the start of every offline or AI game
+    // The Reset button, and the start of every offline or AI game. After a finished game
+    // the players swap symbols, so each side takes turns going first (X always starts).
     function restartGame() {
+        if (state.result) state.player1 = TicTacToeGame.otherSymbol(state.player1);
         resetBoard();
         render();
         squares[0].focus();
+        scheduleAiTurn(); // the AI opens when it has X
     }
 
     function startOfflineGame() {
         state.mode = "offline";
+        state.player1 = "X";
         applyTheme("offline");
         switchToGame();
         restartGame();
@@ -152,9 +165,13 @@ document.addEventListener("DOMContentLoaded", () => {
     function startAIGame(difficulty) {
         state.mode = "ai";
         state.aiDifficulty = difficulty;
+        state.player1 = "X";
         switchToGame();
         restartGame();
     }
+
+    // In AI mode the computer plays whichever symbol the human doesn't
+    const aiSymbol = () => TicTacToeGame.otherSymbol(state.player1);
 
     // A player clicked a cell (buttons also click on Enter and Space)
     function handleCellChoice(index) {
@@ -163,12 +180,10 @@ document.addEventListener("DOMContentLoaded", () => {
             sendOnlineMove(index);
             return;
         }
-        if (state.mode === "ai" && state.turn === "O") return; // the AI is still thinking
+        if (state.mode === "ai" && state.turn === aiSymbol()) return; // the AI is still thinking
 
         placeMark(index);
-        if (state.mode === "ai" && state.active) {
-            aiTimer = setTimeout(playAiTurn, 500); // short pause so the AI feels like it's thinking
-        }
+        scheduleAiTurn();
     }
 
     // Place the current player's mark, then end the game or pass the turn
@@ -180,8 +195,15 @@ document.addEventListener("DOMContentLoaded", () => {
         render();
     }
 
+    // If it's the AI's turn, play after a short pause so it feels like it's thinking
+    function scheduleAiTurn() {
+        if (state.mode === "ai" && state.active && state.turn === aiSymbol()) {
+            aiTimer = setTimeout(playAiTurn, 500);
+        }
+    }
+
     function playAiTurn() {
-        const move = TicTacToeGame.aiMove(state.board, state.aiDifficulty, "O");
+        const move = TicTacToeGame.aiMove(state.board, state.aiDifficulty, aiSymbol());
         if (move !== -1) placeMark(move);
     }
 
