@@ -280,11 +280,14 @@ body {
 .square.x {
     color: #ff4d4d;
     text-shadow: 3px 3px 12px rgba(255, 0, 0, 1);
-    animation: pop-in 0.2s ease-out;
 }
 .square.o {
     color: #3399ff;
     text-shadow: 3px 3px 12px rgba(0, 0, 255, 1);
+}
+/* Only the symbol pops in; the cell itself stays still */
+.square .mark {
+    display: inline-block;
     animation: pop-in 0.2s ease-out;
 }
 
@@ -419,8 +422,7 @@ body {
 /* OS "reduce motion" setting: keep colour, glow and fade feedback, but drop
    the movement (scaling, popping and the endless pulse). */
 @media (prefers-reduced-motion: reduce) {
-    .square.x,
-    .square.o {
+    .square .mark {
         animation-name: fade-in;
     }
     .winning-square {
