@@ -9,6 +9,10 @@ backend is a small Node server that handles real-time matches over WebSockets an
 a results leaderboard in SQLite. Built as a personal project to dig into game AI and
 real-time multiplayer.
 
+**Play it live: [tictactoe-n3eh.onrender.com](https://tictactoe-n3eh.onrender.com)**
+(free hosting, so the first visit after a quiet spell takes about a minute to wake the
+server up). For online play, open it on two devices, or send a friend a private room code.
+
 ## Game modes
 
 - **Local (offline):** two players share one keyboard and mouse on the same board.
