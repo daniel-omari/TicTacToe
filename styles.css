@@ -34,15 +34,17 @@ body {
    scroll normally if a screen is ever taller than the window. */
 #menu-screen,
 #ai-mode-selection,
+#online-mode-selection,
 #leaderboard,
 .game-container {
     margin: auto;
     isolation: isolate; /* keeps the title/board glow layers inside the card */
 }
 
-/* The three menu-style screens share one card layout */
+/* The menu-style screens share one card layout */
 #menu-screen,
 #ai-mode-selection,
+#online-mode-selection,
 #leaderboard {
     display: flex;
     flex-direction: column;
@@ -105,13 +107,14 @@ body {
 }
 
 #ai { background: linear-gradient(135deg, #FFD700, #FF8C00); }
-#online, #aiIntermediate { background: linear-gradient(135deg, #33B5E5, #0099CC); }
-#offline, #aiNaive { background: linear-gradient(135deg, #00C851, #007E33); }
+#online, #aiIntermediate, #quickMatch { background: linear-gradient(135deg, #33B5E5, #0099CC); }
+#offline, #aiNaive, #createRoom { background: linear-gradient(135deg, #00C851, #007E33); }
 #viewLeaderboard, #aiAdvanced { background: linear-gradient(135deg, #7733e5, #4e00cc); }
 #aiUnbeatable { background: linear-gradient(135deg, #FF4081, #D50000); }
 
-/* The difficulty options are the main event on their screen, so make them taller */
-#ai-mode-selection .menu-button {
+/* The difficulty and online options are the main event on their screens, so make them taller */
+#ai-mode-selection .menu-button,
+#online-mode-selection .menu-button {
     padding-block: clamp(16px, 3vh, 24px);
 }
 
@@ -126,6 +129,56 @@ body {
     border-radius: 10px;
     cursor: pointer;
     transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ---------- Join a room by code ---------- */
+.join-form {
+    width: 100%;
+    margin-top: 4px;
+}
+.join-form label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: clamp(15px, 2.5vw, 18px);
+    color: #333;
+}
+.join-row {
+    display: flex;
+    gap: 8px;
+}
+#roomCode {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    font-size: clamp(18px, 4vw, 22px);
+    font-weight: bold;
+    letter-spacing: 0.2em;
+    text-align: center;
+    text-transform: uppercase;
+    border: 2px solid #999;
+    border-radius: 10px;
+}
+#roomCode:focus-visible,
+#joinRoom:focus-visible {
+    outline: 3px solid #ffcc00;
+    outline-offset: 2px;
+}
+#joinRoom {
+    padding: 10px 22px;
+    font-size: clamp(16px, 3vw, 18px);
+    font-weight: bold;
+    color: white;
+    background: linear-gradient(135deg, #33B5E5, #0099CC);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: filter 0.2s ease;
+}
+.form-error {
+    min-height: 1.2em; /* keeps the layout still when a message appears */
+    margin: 6px 0 0;
+    font-size: 15px;
+    color: #c00;
 }
 
 /* ---------- Leaderboard ---------- */
@@ -294,6 +347,9 @@ body {
         transform: scale(1.04);
         filter: brightness(1.15);
         box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+    }
+    #joinRoom:hover {
+        filter: brightness(1.15);
     }
     .back-button:hover {
         color: white;

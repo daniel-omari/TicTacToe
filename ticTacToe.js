@@ -14,10 +14,9 @@ document.addEventListener("DOMContentLoaded", () => {
         aiDifficulty: "naive",
         player1: "X",         // Player 1's symbol (in AI mode, the human). Swaps after every finished game.
         symbol: null,         // online only: the symbol the server gave us
+        roomCode: null,       // online only: the private room's code, to show and share
         rematch: "hidden",    // online only: "hidden", "available" or "requested"
     };
-
-    const ONLINE_ROOM = "gameRoom";
 
     // Where the game server is. When the server hosts this page, talk to the same origin
     // (wss:// on https). Opened straight from a file, fall back to a local server.
@@ -49,6 +48,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const aiModeSelection = document.getElementById("ai-mode-selection");
     const difficultyButtons = document.querySelectorAll("[data-difficulty]");
     const aiBackButton = document.getElementById("aiBack");
+    const onlineModeSelection = document.getElementById("online-mode-selection");
+    const quickMatchButton = document.getElementById("quickMatch");
+    const createRoomButton = document.getElementById("createRoom");
+    const joinForm = document.getElementById("joinForm");
+    const roomCodeInput = document.getElementById("roomCode");
+    const onlineError = document.getElementById("onlineError");
+    const onlineBackButton = document.getElementById("onlineBack");
 
     // ---- Rendering ----
 
@@ -94,7 +100,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // The line above the status: who is playing which symbol
     function playerMessage() {
-        if (state.mode === "online") return state.symbol ? `You are player: ${state.symbol}` : "";
+        if (state.mode === "online") {
+            if (!state.symbol) return "";
+            return state.roomCode
+                ? `You are player: ${state.symbol} (room ${state.roomCode})`
+                : `You are player: ${state.symbol}`;
+        }
         if (state.mode === "ai") return `You are player: ${state.player1}`;
         if (state.mode === "offline") {
             return `Player 1 is ${state.player1}, Player 2 is ${TicTacToeGame.otherSymbol(state.player1)}`;
@@ -119,12 +130,14 @@ document.addEventListener("DOMContentLoaded", () => {
     function switchToGame() {
         menuScreen.style.display = "none";
         aiModeSelection.style.display = "none";
+        onlineModeSelection.style.display = "none";
         gameContainer.style.display = "flex";
     }
 
     // Show the main menu (hiding every other screen) and move keyboard focus into it
     function showMenu(focusTarget) {
         aiModeSelection.style.display = "none";
+        onlineModeSelection.style.display = "none";
         leaderboardScreen.style.display = "none";
         gameContainer.style.display = "none";
         menuScreen.style.display = ""; // back to its stylesheet layout
@@ -137,6 +150,18 @@ document.addEventListener("DOMContentLoaded", () => {
         menuScreen.style.display = "none";
         aiModeSelection.style.display = "flex";
         difficultyButtons[0].focus();
+    }
+
+    // The online options: quick match, a private room, or join one by code. An error from
+    // a failed join (wrong code, full room) is shown under the code box.
+    function showOnlineMenu(error = "") {
+        applyTheme("online");
+        menuScreen.style.display = "none";
+        gameContainer.style.display = "none";
+        onlineModeSelection.style.display = "flex";
+        onlineError.textContent = error;
+        if (error) roomCodeInput.focus();
+        else quickMatchButton.focus();
     }
 
     // ---- Game flow (offline and AI) ----
@@ -223,8 +248,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (event.key === "ArrowLeft" && index % 3 !== 0) squares[index - 1].focus();
     }
 
-    // Leave the current game and go back to the main menu, clearing all mode state
-    function returnToMenu() {
+    // Stop the current game in any mode and clear all mode state
+    function leaveGame() {
         if (ws) { // leaving an online game: stop listening, and closing tells the server we left
             ws.onmessage = null;
             ws.onclose = null;
@@ -233,8 +258,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         state.mode = null;
         state.symbol = null;
+        state.roomCode = null;
         resetBoard(); // also cancels a pending AI move
         render();
+    }
+
+    // The Menu button: leave the game and go back to the main menu
+    function returnToMenu() {
+        leaveGame();
         showMenu(aiButton);
     }
 
@@ -242,13 +273,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // The server owns the online board. We only send requests; the board on screen
     // changes when the server's "update" message comes back.
 
-    function startOnlineGame() {
+    // Connect and send one request: { type: "quick" }, { type: "create" } or
+    // { type: "join", code }
+    function startOnlineGame(request) {
         state.mode = "online";
         state.symbol = null;
+        state.roomCode = null;
         resetBoard();
         state.active = false; // no moves until an opponent joins
-        state.notice = "Searching for an opponent...";
-        applyTheme("online");
+        state.notice = "Connecting...";
         switchToGame();
         render();
 
@@ -257,7 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let connected = false;
         ws.onopen = () => {
             connected = true;
-            ws.send(JSON.stringify({ type: "join", room: ONLINE_ROOM }));
+            ws.send(JSON.stringify(request));
         };
 
         // Without this a dead or unreachable server would leave the page "searching" forever
@@ -272,7 +305,15 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         ws.onmessage = (event) => {
-            handleServerMessage(JSON.parse(event.data));
+            const data = JSON.parse(event.data);
+            if (data.type === "not_found" || data.type === "full") { // couldn't join: back to the options
+                leaveGame();
+                showOnlineMenu(data.type === "full"
+                    ? "That room already has two players."
+                    : "No room with that code. Check it and try again.");
+                return;
+            }
+            handleServerMessage(data);
             render();
         };
     }
@@ -283,8 +324,13 @@ document.addEventListener("DOMContentLoaded", () => {
             case "assign": // our symbol, at the start and again after a rematch swap
                 state.symbol = data.symbol;
                 break;
+            case "room": // a private room: its code, to share
+                state.roomCode = data.code;
+                break;
             case "waiting":
-                state.notice = "Searching for an opponent...";
+                state.notice = state.roomCode
+                    ? `Room code: ${state.roomCode}. Send it to a friend; the game starts when they join.`
+                    : "Searching for an opponent...";
                 break;
             case "start": // first game or a rematch: begin from a clean board
                 resetBoard();
@@ -307,14 +353,12 @@ document.addEventListener("DOMContentLoaded", () => {
             case "rematch_requested":
                 state.notice = "Your opponent wants a rematch!";
                 break;
-            case "full":
-                state.active = false;
-                state.notice = "Room is full! Try again later.";
-                break;
             case "opponent_left": // fresh board while we wait for someone new
                 resetBoard();
                 state.active = false;
-                state.notice = "Your opponent left. Waiting for a new opponent...";
+                state.notice = state.roomCode
+                    ? `Your opponent left. Room code ${state.roomCode} is still open.`
+                    : "Your opponent left. Waiting for a new opponent...";
                 break;
         }
     }
@@ -385,7 +429,20 @@ document.addEventListener("DOMContentLoaded", () => {
     difficultyButtons.forEach((button) => {
         button.addEventListener("click", () => startAIGame(button.dataset.difficulty));
     });
-    onlineButton.addEventListener("click", startOnlineGame);
+    onlineButton.addEventListener("click", () => showOnlineMenu());
+    quickMatchButton.addEventListener("click", () => startOnlineGame({ type: "quick" }));
+    createRoomButton.addEventListener("click", () => startOnlineGame({ type: "create" }));
+    joinForm.addEventListener("submit", (event) => {
+        event.preventDefault(); // stay on the page
+        const code = roomCodeInput.value.trim().toUpperCase();
+        if (!code) {
+            onlineError.textContent = "Enter a room code first.";
+            roomCodeInput.focus();
+            return;
+        }
+        startOnlineGame({ type: "join", code });
+    });
+    onlineBackButton.addEventListener("click", () => showMenu(onlineButton));
     leaderboardButton.addEventListener("click", displayLeaderboard);
 
     resetButton.addEventListener("click", restartGame);

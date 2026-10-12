@@ -10,8 +10,6 @@ const WebSocket = require("ws");
 const { server, wss } = require("../server.js");
 
 let baseUrl;
-let roomCounter = 0;
-const newRoom = () => `test-room-${++roomCounter}`; // every test gets its own room
 
 before(() => new Promise((resolve) => {
     server.listen(0, () => {
@@ -67,16 +65,25 @@ async function expectNo(ws, type, action) {
     assert.ok(!ws.messages.slice(before).some((m) => m.type === type), `unexpected "${type}"`);
 }
 
-// Two players in a fresh room, game started. Returns [x, o].
-async function startGame(room = newRoom()) {
-    const first = await connect();
-    send(first, { type: "join", room });
-    await next(first, "waiting");
+// A player who has created a private room. Resolves with [player, code].
+async function createRoom() {
+    const player = await connect();
+    const room = next(player, "room");
+    const waiting = next(player, "waiting");
+    send(player, { type: "create" });
+    const { code } = await room;
+    await waiting;
+    return [player, code];
+}
+
+// Two players in a fresh private room, game started. Returns [x, o, code].
+async function startGame() {
+    const [first, code] = await createRoom();
     const second = await connect();
     const started = Promise.all([next(first, "start"), next(second, "start")]);
-    send(second, { type: "join", room });
+    send(second, { type: "join", code });
     await started;
-    return first.symbol === "X" ? [first, second] : [second, first];
+    return first.symbol === "X" ? [first, second, code] : [second, first, code];
 }
 
 // Make a move and wait for the opponent to see the resulting board
@@ -85,6 +92,62 @@ async function move(player, opponent, index) {
     send(player, { type: "move", index });
     return update;
 }
+
+test("creating a room gives a shareable code, and joining with it starts the game", async () => {
+    const [host, code] = await createRoom();
+    assert.match(code, /^[A-HJKMNP-Z2-9]{5}$/); // no look-alike characters
+
+    const guest = await connect();
+    const told = next(guest, "room");
+    const started = Promise.all([next(host, "start"), next(guest, "start")]);
+    send(guest, { type: "join", code: ` ${code.toLowerCase()} ` }); // typed loosely
+    assert.equal((await told).code, code);
+    await started;
+    assert.deepEqual([host.symbol, guest.symbol], ["X", "O"]);
+    host.close(); guest.close();
+});
+
+test("joining a code that doesn't exist is refused", async () => {
+    const player = await connect();
+    for (const code of ["ZZZZZ", "", 42, null]) {
+        const refused = next(player, "not_found");
+        send(player, { type: "join", code });
+        await refused;
+    }
+    player.close();
+});
+
+test("quick match pairs two waiting players, and never joins a private room", async () => {
+    const [host] = await createRoom();                      // private: must be skipped
+
+    const first = await connect();
+    const waiting = next(first, "waiting");
+    send(first, { type: "quick" });
+    await waiting;
+
+    const second = await connect();
+    const started = Promise.all([next(first, "start"), next(second, "start")]);
+    await expectNo(host, "start", async () => {
+        send(second, { type: "quick" });
+        await started;
+    });
+    assert.deepEqual([first.symbol, second.symbol], ["X", "O"]);
+
+    const update = await move(first, second, 4);            // they really share a board
+    assert.equal(update.board[4], "X");
+    host.close(); first.close(); second.close();
+});
+
+test("one connection can only be in one room", async () => {
+    const [x, o] = await startGame();
+    await expectNo(x, "room", async () => {
+        send(x, { type: "create" });
+        send(x, { type: "quick" });
+    });
+    const update = await move(x, o, 0);                     // still playing the same game
+    assert.equal(update.board[0], "X");
+    x.close(); o.close();
+});
 
 test("two players get different symbols and both are told the game started", async () => {
     const [x, o] = await startGame();
@@ -142,18 +205,16 @@ test("the game ends with a win, and later moves are ignored", async () => {
 });
 
 test("a third player is refused while the room is in use", async () => {
-    const room = newRoom();
-    const [x, o] = await startGame(room);
+    const [x, o, code] = await startGame();
     const third = await connect();
     const full = next(third, "full");
-    send(third, { type: "join", room });
+    send(third, { type: "join", code });
     await full;
     x.close(); o.close(); third.close();
 });
 
 test("when a player leaves mid-game, the other gets a fresh board and the newcomer the free symbol", async () => {
-    const room = newRoom();
-    const [x, o] = await startGame(room);
+    const [x, o, code] = await startGame();
     await move(x, o, 4);
 
     const left = next(o, "opponent_left");
@@ -163,7 +224,7 @@ test("when a player leaves mid-game, the other gets a fresh board and the newcom
 
     const newcomer = await connect();
     const started = next(newcomer, "start");
-    send(newcomer, { type: "join", room });
+    send(newcomer, { type: "join", code });
     await started;
     assert.equal(newcomer.symbol, "O", "no duplicate symbol");
 

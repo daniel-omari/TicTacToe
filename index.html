@@ -28,6 +28,24 @@
         <button class="back-button" id="aiBack">Back</button>
     </div>
 
+    <!-- Online: how to find an opponent -->
+    <div id="online-mode-selection" style="display: none;">
+        <h2 class="glow-title" data-text="Play Online">Play Online</h2>
+        <p class="screen-subtitle">Find an opponent:</p>
+        <button class="menu-button" id="quickMatch">Quick Match <span class="hint">Play the next person who's looking</span></button>
+        <button class="menu-button" id="createRoom">Private Room <span class="hint">Get a code to share with a friend</span></button>
+        <form id="joinForm" class="join-form">
+            <label for="roomCode">Have a code?</label>
+            <div class="join-row">
+                <input id="roomCode" name="roomCode" type="text" maxlength="5" autocomplete="off"
+                       autocapitalize="characters" spellcheck="false" placeholder="ABCDE">
+                <button type="submit" id="joinRoom">Join</button>
+            </div>
+            <p id="onlineError" class="form-error" role="alert"></p>
+        </form>
+        <button class="back-button" id="onlineBack">Back</button>
+    </div>
+
     <!-- PVP and Offline game -->
     <div class="game-container" id="game-container" style="display: none;">
         <h1 class="glow-title" data-text="Tic-Tac-Toe">Tic-Tac-Toe</h1>

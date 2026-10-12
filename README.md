@@ -14,8 +14,10 @@ real-time multiplayer.
 - **Local (offline):** two players share one keyboard and mouse on the same board.
 - **Versus AI:** play the computer at one of four difficulty levels (Naive, Intermediate,
   Advanced, Unbeatable).
-- **Online:** two browsers join the same room and play in real time, with the server
-  acting as the source of truth for the board and recording the result.
+- **Online:** Quick Match pairs you with the next person looking for a game, or create a
+  Private Room and send the 5-letter code to a friend. Play in real time, with the server
+  acting as the source of truth for the board and recording the result, then Rematch to go
+  again with swapped symbols.
 - **Leaderboard:** a running tally of wins by symbol, served from the database.
 
 ## The AI
@@ -44,8 +46,11 @@ pick.
 
 ## Online multiplayer
 
-The Node server (`server.js`) runs a WebSocket endpoint and a small HTTP API. Players are
-matched into a room; the server holds the authoritative board, validates each move
+The Node server (`server.js`) runs a WebSocket endpoint and a small HTTP API. Players meet
+in rooms: Quick Match fills public rooms in order of arrival, while a private room gets a
+random 5-character code (made with `crypto.randomInt`, skipping look-alike characters such
+as 0/O and 1/I/L) that only the people you share it with can use. Each connection can be in
+one room at a time. The server holds the authoritative board, validates each move
 (correct turn, legal cell, and the sender's own server-assigned symbol and room, so a
 tampered client cannot move for its opponent), broadcasts updates to both clients, and
 detects wins and draws
@@ -126,6 +131,5 @@ GitHub Actions runs linting, the tests and `npm audit` on Node 22 and 24 for eve
 
 ## Notes
 
-This is a hobby project. The online mode uses a single fixed room and a hardcoded
-`localhost:3000` server address, which are fine for local play and a demo but would need
-configurable rooms and a deployed server address for real use.
+This is a hobby project. There are no accounts, so the leaderboard counts wins by symbol
+(X, O and draws) rather than by player.

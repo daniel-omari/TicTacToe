@@ -4,6 +4,7 @@
 const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 const TicTacToeGame = require('./game.js');
 
@@ -30,10 +31,32 @@ const selectLeaderboard = db.prepare(
     "SELECT winner, COUNT(*) AS wins FROM game_results GROUP BY winner ORDER BY wins DESC"
 );
 
-const rooms = {};
+// Every room by its code. Private rooms are joined by typing the code; quick-match
+// rooms are public and pair up strangers (their code is never shown).
+const rooms = new Map();
 
-// Room IDs are client-supplied, so keep them to a sane charset/length.
-const ROOM_ID_PATTERN = /^[\w-]{1,32}$/;
+// Codes skip look-alike characters (0/O, 1/I/L) so they are easy to read out and type.
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const CODE_LENGTH = 5;
+
+function newRoomCode() {
+    let code;
+    do {
+        code = "";
+        for (let i = 0; i < CODE_LENGTH; i++) {
+            code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+        }
+    } while (rooms.has(code));
+    return code;
+}
+
+function createRoom(isPrivate) {
+    const code = newRoomCode();
+    const room = { code, isPrivate, players: [] };
+    resetRoom(room);
+    rooms.set(code, room);
+    return room;
+}
 
 // Send JSON to a client only if its socket is still open.
 function safeSend(ws, payload) {
@@ -50,47 +73,54 @@ function resetRoom(room) {
     room.rematchVotes = new Set();
 }
 
-// Add the connecting socket to a room and assign it a free symbol.
-function handleJoin(ws, data) {
-    // Validate the room id and refuse a second join from the same socket.
-    if (typeof data.room !== 'string' || !ROOM_ID_PATTERN.test(data.room) || ws.room) {
-        return;
-    }
-
-    // Create the room if it doesn't exist
-    let room = rooms[data.room];
-    if (!room) {
-        room = { players: [] };
-        resetRoom(room);
-        rooms[data.room] = room;
-    }
-
-    // Check if room is full
-    if (room.players.length >= 2) {
-        safeSend(ws, { type: "full" });
-        return;
-    }
-
+// Seat a player in a room with a free symbol, then wait or start the game.
+function addPlayer(ws, room) {
     // Take whichever symbol is still free (not "first in = X"), so a player who
     // joins after someone left can never end up with the same symbol as the other.
     const taken = room.players.map((player) => player.symbol);
     room.players.push(ws);
-    ws.room = data.room;
+    ws.room = room.code;
     ws.symbol = taken.includes("X") ? "O" : "X";
-
-    // Assign the symbol and notify the client
     safeSend(ws, { type: "assign", symbol: ws.symbol });
 
-    // If there is only one player, inform them to wait
     if (room.players.length < 2) {
         safeSend(ws, { type: "waiting" });
         return;
     }
+    room.players.forEach((player) => safeSend(player, { type: "start" }));
+}
 
-    // Notify both players to start the game
-    room.players.forEach((player) => {
-        safeSend(player, { type: "start" });
-    });
+// "create": open a private room and tell the creator its code to share.
+function handleCreate(ws) {
+    if (ws.room) return; // one room per connection
+    const room = createRoom(true);
+    safeSend(ws, { type: "room", code: room.code });
+    addPlayer(ws, room);
+}
+
+// "join": take the free seat in a private room, by its code.
+function handleJoin(ws, data) {
+    if (ws.room) return;
+    const code = typeof data.code === "string" ? data.code.trim().toUpperCase() : "";
+    const room = rooms.get(code);
+    if (!room || !room.isPrivate) {
+        safeSend(ws, { type: "not_found" });
+        return;
+    }
+    if (room.players.length >= 2) {
+        safeSend(ws, { type: "full" });
+        return;
+    }
+    safeSend(ws, { type: "room", code: room.code });
+    addPlayer(ws, room);
+}
+
+// "quick": pair with whoever has been waiting longest, or wait for the next player.
+function handleQuickMatch(ws) {
+    if (ws.room) return;
+    let room = [...rooms.values()].find((r) => !r.isPrivate && r.players.length === 1);
+    if (!room) room = createRoom(false);
+    addPlayer(ws, room);
 }
 
 // Apply one validated move, then broadcast the new state or the game result.
@@ -98,7 +128,7 @@ function handleMove(ws, data) {
     // The move is only trusted for the room and symbol the SERVER assigned to
     // this connection - never the ones claimed in the message - so a client
     // cannot move for their opponent or into a room they never joined.
-    const room = rooms[ws.room];
+    const room = rooms.get(ws.room);
     if (!room || !room.players.includes(ws)) return;
     if (room.finished) return;                      // game over, waiting for a rematch
     if (room.players.length < 2) return;            // no solo play before an opponent joins
@@ -155,7 +185,7 @@ function handleMove(ws, data) {
 // A finished game restarts once both players ask for a rematch. They swap
 // symbols, so whoever went second last game starts as X (X always moves first).
 function handleRematch(ws) {
-    const room = rooms[ws.room];
+    const room = rooms.get(ws.room);
     if (!room || !room.finished || !room.players.includes(ws)) return;
 
     room.rematchVotes.add(ws);
@@ -186,7 +216,9 @@ wss.on('connection', (ws) => {
         if (!data || typeof data !== 'object') return;
 
         try {
+            if (data.type === 'create') handleCreate(ws);
             if (data.type === 'join') handleJoin(ws, data);
+            if (data.type === 'quick') handleQuickMatch(ws);
             if (data.type === 'move') handleMove(ws, data);
             if (data.type === 'rematch') handleRematch(ws);
         } catch (err) {
@@ -198,12 +230,12 @@ wss.on('connection', (ws) => {
     // board and waits for a new opponent as X, instead of keeping the old,
     // half-played game (which a newcomer would then have joined mid-way).
     ws.on('close', () => {
-        const room = rooms[ws.room];
+        const room = rooms.get(ws.room);
         if (!room) return;
 
         room.players = room.players.filter((player) => player !== ws);
         if (room.players.length === 0) {
-            delete rooms[ws.room];
+            rooms.delete(ws.room);
             return;
         }
 
