@@ -1,16 +1,19 @@
 {
   "name": "tic-tac-toe",
-  "version": "2.0.0",
-  "description": "Web-based Tic-Tac-Toe with a minimax AI and online multiplayer over WebSockets.",
-  "main": "server.js",
+  "version": "2.1.0",
+  "description": "Web-based Tic-Tac-Toe in TypeScript, with a minimax AI and online multiplayer over WebSockets.",
+  "type": "module",
+  "main": "dist/src/server/main.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test --disable-warning=ExperimentalWarning",
+    "build": "tsc",
+    "prestart": "npm run build",
+    "start": "node --disable-warning=ExperimentalWarning dist/src/server/main.js",
+    "pretest": "npm run build",
+    "test": "node --test --disable-warning=ExperimentalWarning \"dist/test/*.test.js\"",
     "lint": "eslint ."
   },
   "license": "MIT",
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.19.2",
     "ws": "^8.17.0"
   },
@@ -19,7 +22,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/express": "^4.17.25",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
     "eslint": "^10.12.0",
-    "globals": "^17.13.0"
+    "globals": "^17.13.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2"
   }
 }

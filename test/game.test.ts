@@ -1,21 +1,21 @@
-"use strict";
-// Unit tests for the shared game rules and AI (game.js).
+// Unit tests for the shared game rules, AI and player names (src/shared/game.ts).
 
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const Game = require("../game.js");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as Game from "../src/shared/game.js";
+import type { Board, Cell, Difficulty, Mark } from "../src/shared/game.js";
 
 // Build a board from a 9-character string, "." = empty, e.g. "XO.X....."
-const boardOf = (cells) => [...cells].map((c) => (c === "." ? "" : c));
+const boardOf = (cells: string): Board => [...cells].map((c) => (c === "." ? "" : c) as Cell);
 
 // A fake random number generator that returns the given values in order
-const sequence = (...values) => {
+const sequence = (...values: number[]) => {
     let i = 0;
     return () => values[i++ % values.length];
 };
 
 test("getResult finds every winning line for both players", () => {
-    for (const symbol of ["X", "O"]) {
+    for (const symbol of ["X", "O"] as const) {
         for (const line of Game.WINNING_LINES) {
             const board = Game.emptyBoard();
             line.forEach((index) => (board[index] = symbol));
@@ -29,7 +29,7 @@ test("getResult reports a draw when the board fills with no line", () => {
 });
 
 test("a win made with the last move counts as a win, not a draw", () => {
-    assert.equal(Game.getResult(boardOf("XOXOXOOXX")).winner, "X");
+    assert.equal(Game.getResult(boardOf("XOXOXOOXX"))?.winner, "X");
 });
 
 test("getResult returns null while the game is still going", () => {
@@ -84,7 +84,7 @@ test("moves return -1 on a full or finished board", () => {
 });
 
 test("an unknown difficulty is an error, not a silent default", () => {
-    assert.throws(() => Game.aiMove(Game.emptyBoard(), "impossible", "X"), /Unknown difficulty/);
+    assert.throws(() => Game.aiMove(Game.emptyBoard(), "impossible" as Difficulty, "X"), /Unknown difficulty/);
 });
 
 test("naive plays the best move when its coin flip says so, otherwise random", () => {
@@ -123,9 +123,9 @@ test("advanced sets up its own fork when it plays well", () => {
 });
 
 // Every position reachable in a real game, with the player to move
-function reachablePositions() {
-    const positions = new Map();
-    (function walk(board, toMove) {
+function reachablePositions(): { board: Board; toMove: Mark }[] {
+    const positions = new Map<string, { board: Board; toMove: Mark }>();
+    (function walk(board: Board, toMove: Mark) {
         const key = board.join(",") + toMove;
         if (positions.has(key) || Game.getResult(board)) return;
         positions.set(key, { board: [...board], toMove });
@@ -154,11 +154,11 @@ test("advanced never misses a win or a block, in any reachable position", () => 
 // answers with every one of its equally best moves (each tie it might pick at random),
 // and fail if the opponent ever wins. Tic-Tac-Toe is small enough to check exhaustively,
 // so this is a proof, not a sample.
-function countGamesWhereAiNeverLoses(aiSymbol) {
+function countGamesWhereAiNeverLoses(aiSymbol: Mark): number {
     const opponent = Game.otherSymbol(aiSymbol);
     let games = 0;
 
-    (function play(board, toMove) {
+    (function play(board: Board, toMove: Mark) {
         const result = Game.getResult(board);
         if (result) {
             assert.notEqual(result.winner, opponent, `AI as ${aiSymbol} lost: ${board.join(",")}`);

@@ -1,33 +1,22 @@
-"use strict";
-// ESLint flat config: the recommended rules, with the right globals for each kind of file.
+// ESLint flat config: the recommended JavaScript and TypeScript rules, with browser
+// globals for the client and Node globals for the server, tests and tooling.
+// (tsc does the type checking; ESLint catches the rest.)
 
-const js = require("@eslint/js");
-const globals = require("globals");
+import js from "@eslint/js";
+import { defineConfig } from "eslint/config";
+import globals from "globals";
+import tseslint from "typescript-eslint";
 
-module.exports = [
-    { ignores: ["node_modules/"] },
+export default defineConfig(
+    { ignores: ["dist/", "node_modules/"] },
     js.configs.recommended,
+    tseslint.configs.recommended,
     {
-        // Shared rules: a plain browser script that is also require()d by Node
-        files: ["game.js"],
-        languageOptions: {
-            sourceType: "script",
-            globals: { ...globals.browser, module: "readonly" },
-        },
+        files: ["src/client/**/*.ts"],
+        languageOptions: { globals: globals.browser },
     },
     {
-        // Browser client: loaded after game.js, which provides TicTacToeGame
-        files: ["ticTacToe.js"],
-        languageOptions: {
-            sourceType: "script",
-            globals: { ...globals.browser, TicTacToeGame: "readonly" },
-        },
+        files: ["src/server/**/*.ts", "test/**/*.ts", "eslint.config.js"],
+        languageOptions: { globals: globals.node },
     },
-    {
-        files: ["server.js", "eslint.config.js", "test/**/*.js"],
-        languageOptions: {
-            sourceType: "commonjs",
-            globals: { ...globals.node },
-        },
-    },
-];
+);

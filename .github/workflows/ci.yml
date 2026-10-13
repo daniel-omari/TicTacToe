@@ -20,6 +20,8 @@ jobs:
         run: npm ci
       - name: Lint (ESLint)
         run: npm run lint
+      - name: Type-check and build (tsc)
+        run: npm run build
       - name: Test (node:test)
         run: npm test
       - name: Audit dependencies

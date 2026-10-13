@@ -1,27 +1,48 @@
-// npm install
-// npm start
+// The game server: hosts the page, runs online games over WebSockets and keeps the
+// leaderboard in SQLite. main.ts starts it; the tests import it and pick their own port.
 
-const WebSocket = require('ws');
-const http = require('http');
-const path = require('path');
-const crypto = require('crypto');
-const { DatabaseSync } = require('node:sqlite');
-const TicTacToeGame = require('./game.js');
+import crypto from "node:crypto";
+import http from "node:http";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import express from "express";
+import { WebSocketServer, WebSocket } from "ws";
+import * as Game from "../shared/game.js";
+import type { Board, Mark } from "../shared/game.js";
+import type { LeaderboardRow, ServerMessage } from "../shared/protocol.js";
 
-const express = require('express');
-const app = express();
-app.disable('x-powered-by');
+// A connected browser: the socket plus what the server knows about it
+interface Player extends WebSocket {
+    room?: string;              // code of the room it is in
+    symbol?: Mark;              // the symbol the server gave it
+    playerId: string | null;    // its secret browser ID, or null for a guest
+    playerName: string;
+    isAlive: boolean;           // answered the last heartbeat ping
+}
 
-const server = http.createServer(app);
+interface Room {
+    code: string;
+    isPrivate: boolean;         // joined by code, never used by quick match
+    players: Player[];
+    board: Board;
+    turn: Mark;
+    finished: boolean;          // true between game over and a rematch
+    rematchVotes: Set<Player>;
+}
+
+// Incoming messages are untrusted JSON, so every field is checked before it is used
+type Incoming = Record<string, unknown>;
+
+export const app = express();
+app.disable("x-powered-by");
+
+export const server = http.createServer(app);
 // Game messages are tiny, so refuse anything over 1 KB instead of parsing it.
-const wss = new WebSocket.Server({ server, maxPayload: 1024 });
-
-const cors = require('cors');
-app.use(cors());
+export const wss = new WebSocketServer({ server, maxPayload: 1024 });
 
 // Game results live in SQLite via Node's built-in driver (no native add-on to build).
 // DB_PATH lets the tests use a throwaway in-memory database (":memory:").
-const db = new DatabaseSync(process.env.DB_PATH || 'tic_tac_toe.db');
+const db = new DatabaseSync(process.env.DB_PATH || "tic_tac_toe.db");
 // One row per player (by their secret browser ID), with their online record. The ID
 // itself is never sent to anyone; the leaderboard shows only the name made from it.
 db.exec(`CREATE TABLE IF NOT EXISTS players (
@@ -46,14 +67,14 @@ const selectLeaderboard = db.prepare(`
 
 // Every room by its code. Private rooms are joined by typing the code; quick-match
 // rooms are public and pair up strangers (their code is never shown).
-const rooms = new Map();
+const rooms = new Map<string, Room>();
 
 // Codes skip look-alike characters (0/O, 1/I/L) so they are easy to read out and type.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 5;
 
-function newRoomCode() {
-    let code;
+function newRoomCode(): string {
+    let code: string;
     do {
         code = "";
         for (let i = 0; i < CODE_LENGTH; i++) {
@@ -63,38 +84,41 @@ function newRoomCode() {
     return code;
 }
 
-function createRoom(isPrivate) {
+function createRoom(isPrivate: boolean): Room {
     const code = newRoomCode();
-    const room = { code, isPrivate, players: [] };
-    resetRoom(room);
+    const room: Room = {
+        code, isPrivate, players: [],
+        board: Game.emptyBoard(), turn: "X", finished: false, rematchVotes: new Set(),
+    };
     rooms.set(code, room);
     return room;
 }
 
-// Send JSON to a client only if its socket is still open.
-function safeSend(ws, payload) {
+// Send a message to a client only if its socket is still open.
+function safeSend(ws: Player, message: ServerMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(payload));
+        ws.send(JSON.stringify(message));
     }
 }
 
 // Put a room back to an empty board with X to move.
-function resetRoom(room) {
-    room.board = TicTacToeGame.emptyBoard();
+function resetRoom(room: Room): void {
+    room.board = Game.emptyBoard();
     room.turn = "X";
-    room.finished = false;      // true between game over and a rematch
+    room.finished = false;
     room.rematchVotes = new Set();
 }
 
 // Seat a player in a room with a free symbol, then wait or start the game.
-function addPlayer(ws, room) {
+function addPlayer(ws: Player, room: Room): void {
     // Take whichever symbol is still free (not "first in = X"), so a player who
     // joins after someone left can never end up with the same symbol as the other.
     const taken = room.players.map((player) => player.symbol);
+    const symbol: Mark = taken.includes("X") ? "O" : "X";
     room.players.push(ws);
     ws.room = room.code;
-    ws.symbol = taken.includes("X") ? "O" : "X";
-    safeSend(ws, { type: "assign", symbol: ws.symbol });
+    ws.symbol = symbol;
+    safeSend(ws, { type: "assign", symbol });
 
     if (room.players.length < 2) {
         safeSend(ws, { type: "waiting" });
@@ -104,17 +128,17 @@ function addPlayer(ws, room) {
 }
 
 // Tell both players the game is on, and who is playing which symbol.
-function startGame(room) {
-    const names = {};
+function startGame(room: Room): void {
+    const names: Record<Mark, string> = { X: "", O: "" };
     room.players.forEach((player) => {
-        names[player.symbol] = player.playerName;
+        if (player.symbol) names[player.symbol] = player.playerName;
     });
     room.players.forEach((player) => safeSend(player, { type: "start", players: names }));
 }
 
 // Add a finished game to both players' records. Guests, and games where both seats
 // belong to the same browser (two tabs), don't count.
-function saveResult(room, winner) {
+function saveResult(room: Room, winner: Mark | "draw"): void {
     const [a, b] = room.players;
     if (!a.playerId || !b.playerId || a.playerId === b.playerId) return;
     for (const player of room.players) {
@@ -127,13 +151,13 @@ function saveResult(room, winner) {
 
 // Who this connection is: the browser's secret ID from the request, if it sent a valid
 // one. Players without one can still play, as "Guest", but their games aren't ranked.
-function identify(ws, data) {
-    ws.playerId = TicTacToeGame.isPlayerId(data.player) ? data.player : null;
-    ws.playerName = TicTacToeGame.playerName(ws.playerId);
+function identify(ws: Player, data: Incoming): void {
+    ws.playerId = Game.isPlayerId(data.player) ? data.player : null;
+    ws.playerName = Game.playerName(ws.playerId);
 }
 
 // "create": open a private room and tell the creator its code to share.
-function handleCreate(ws, data) {
+function handleCreate(ws: Player, data: Incoming): void {
     if (ws.room) return; // one room per connection
     identify(ws, data);
     const room = createRoom(true);
@@ -142,7 +166,7 @@ function handleCreate(ws, data) {
 }
 
 // "join": take the free seat in a private room, by its code.
-function handleJoin(ws, data) {
+function handleJoin(ws: Player, data: Incoming): void {
     if (ws.room) return;
     identify(ws, data);
     const code = typeof data.code === "string" ? data.code.trim().toUpperCase() : "";
@@ -160,77 +184,64 @@ function handleJoin(ws, data) {
 }
 
 // "quick": pair with whoever has been waiting longest, or wait for the next player.
-function handleQuickMatch(ws, data) {
+function handleQuickMatch(ws: Player, data: Incoming): void {
     if (ws.room) return;
     identify(ws, data);
-    let room = [...rooms.values()].find((r) => !r.isPrivate && r.players.length === 1);
-    if (!room) room = createRoom(false);
+    const room = [...rooms.values()].find((r) => !r.isPrivate && r.players.length === 1)
+        ?? createRoom(false);
     addPlayer(ws, room);
 }
 
 // Apply one validated move, then broadcast the new state or the game result.
-function handleMove(ws, data) {
+function handleMove(ws: Player, data: Incoming): void {
     // The move is only trusted for the room and symbol the SERVER assigned to
     // this connection - never the ones claimed in the message - so a client
     // cannot move for their opponent or into a room they never joined.
-    const room = rooms.get(ws.room);
-    if (!room || !room.players.includes(ws)) return;
+    const room = ws.room ? rooms.get(ws.room) : undefined;
+    if (!room || !ws.symbol || !room.players.includes(ws)) return;
     if (room.finished) return;                      // game over, waiting for a rematch
     if (room.players.length < 2) return;            // no solo play before an opponent joins
     if (room.turn !== ws.symbol) return;            // not this player's turn
 
     // Validate the cell index and make sure it's empty.
     const index = data.index;
-    if (!Number.isInteger(index) || index < 0 || index > 8) return;
+    if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index > 8) return;
     if (room.board[index] !== "") return;
 
-    // Make the move and update the turn
     room.board[index] = ws.symbol;
-    room.turn = room.turn === "X" ? "O" : "X";
+    room.turn = Game.otherSymbol(room.turn);
 
     // Check for a win or draw with the shared rules (the same code the browser uses)
-    const result = TicTacToeGame.getResult(room.board);
+    const result = Game.getResult(room.board);
     if (result) {
-        const { winner, line } = result;
-
-        // Store the result in the database
         try {
-            saveResult(room, winner);
+            saveResult(room, result.winner);
         } catch (err) {
-            console.error("Error saving game result:", err.message);
+            console.error("Error saving game result:", (err as Error).message);
         }
 
         // Send the final board first, then the result, so the result message
         // is the last thing each client renders.
         room.players.forEach((player) => {
             safeSend(player, { type: "update", board: room.board, turn: null });
-            safeSend(player, {
-                type: "game_over",
-                winner: winner,
-                winning_combination: line
-            });
+            safeSend(player, { type: "game_over", winner: result.winner, winning_combination: result.line });
         });
 
         // Keep both players in the room so they can ask for a rematch. The room is
         // freed when they leave (see the close handler).
         room.finished = true;
-        return; // exit the move handler once the game is over
+        return;
     }
 
-    // If no winner, update the board for both players
     room.players.forEach((player) => {
-        safeSend(player, {
-            type: "update",
-            board: room.board,
-            turn: room.turn
-        });
+        safeSend(player, { type: "update", board: room.board, turn: room.turn });
     });
 }
 
 // A finished game restarts once both players ask for a rematch. They swap
 // symbols, so whoever went second last game starts as X (X always moves first).
-function handleRematch(ws) {
-    const room = rooms.get(ws.room);
+function handleRematch(ws: Player): void {
+    const room = ws.room ? rooms.get(ws.room) : undefined;
     if (!room || !room.finished || !room.players.includes(ws)) return;
 
     room.rematchVotes.add(ws);
@@ -243,8 +254,9 @@ function handleRematch(ws) {
 
     resetRoom(room);
     room.players.forEach((player) => {
-        player.symbol = player.symbol === "X" ? "O" : "X";
-        safeSend(player, { type: "assign", symbol: player.symbol });
+        const symbol = Game.otherSymbol(player.symbol ?? "O");
+        player.symbol = symbol;
+        safeSend(player, { type: "assign", symbol });
     });
     startGame(room);
 }
@@ -253,8 +265,9 @@ function handleRematch(ws) {
 // player whose network drops never sends a close frame, so their seat would stay taken.
 // Anyone who didn't answer the previous ping is disconnected, which frees the seat.
 const HEARTBEAT_MS = 30000;
-function checkConnections() {
-    wss.clients.forEach((ws) => {
+export function checkConnections(): void {
+    wss.clients.forEach((socket) => {
+        const ws = socket as Player;
         if (!ws.isAlive) {
             ws.terminate();
             return;
@@ -265,55 +278,59 @@ function checkConnections() {
 }
 const heartbeat = setInterval(checkConnections, HEARTBEAT_MS);
 heartbeat.unref(); // never keep the process alive on its own
-wss.on('close', () => clearInterval(heartbeat));
+wss.on("close", () => clearInterval(heartbeat));
 
-wss.on('connection', (ws) => {
+wss.on("connection", (socket) => {
+    const ws = socket as Player;
+    ws.playerId = null;
+    ws.playerName = Game.playerName(null);
     ws.isAlive = true;
-    ws.on('pong', () => {
+    ws.on("pong", () => {
         ws.isAlive = true;
     });
 
     // Socket-level errors (like an oversized message) close that connection. Without a
     // listener, Node would treat them as uncaught and take the whole server down.
-    ws.on('error', (err) => {
+    ws.on("error", (err) => {
         console.error("Connection error:", err.message);
     });
 
-    ws.on('message', (message) => {
+    ws.on("message", (raw) => {
         // A malformed frame must never take the server down.
-        let data;
+        let data: unknown;
         try {
-            data = JSON.parse(message);
+            data = JSON.parse(String(raw));
         } catch {
             return;
         }
-        if (!data || typeof data !== 'object') return;
+        if (!data || typeof data !== "object" || Array.isArray(data)) return;
+        const message = data as Incoming;
 
         try {
-            if (data.type === 'create') handleCreate(ws, data);
-            if (data.type === 'join') handleJoin(ws, data);
-            if (data.type === 'quick') handleQuickMatch(ws, data);
-            if (data.type === 'move') handleMove(ws, data);
-            if (data.type === 'rematch') handleRematch(ws);
+            if (message.type === "create") handleCreate(ws, message);
+            if (message.type === "join") handleJoin(ws, message);
+            if (message.type === "quick") handleQuickMatch(ws, message);
+            if (message.type === "move") handleMove(ws, message);
+            if (message.type === "rematch") handleRematch(ws);
         } catch (err) {
-            console.error("Error handling message:", err.message);
+            console.error("Error handling message:", (err as Error).message);
         }
     });
 
     // When a player disconnects, free their seat. Whoever is left gets a fresh
     // board and waits for a new opponent as X, instead of keeping the old,
     // half-played game (which a newcomer would then have joined mid-way).
-    ws.on('close', () => {
-        const room = rooms.get(ws.room);
+    ws.on("close", () => {
+        const room = ws.room ? rooms.get(ws.room) : undefined;
         if (!room) return;
 
         room.players = room.players.filter((player) => player !== ws);
-        if (room.players.length === 0) {
-            rooms.delete(ws.room);
+        const remaining = room.players[0];
+        if (!remaining) {
+            rooms.delete(room.code);
             return;
         }
 
-        const remaining = room.players[0];
         resetRoom(room);
         remaining.symbol = "X";
         safeSend(remaining, { type: "opponent_left" });
@@ -321,29 +338,20 @@ wss.on('connection', (ws) => {
     });
 });
 
-// The game page itself, so one server hosts everything. Only these files are public;
-// everything else in the folder (server code, the database, package files) stays private.
-const PUBLIC_FILES = ['index.html', 'styles.css', 'game.js', 'ticTacToe.js'];
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-PUBLIC_FILES.forEach((file) => {
-    app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
-});
+// The page itself, so one server hosts everything. Only these three folders are
+// public: the page and its stylesheet, and the compiled browser code. Server code, the
+// database and package files are never served.
+const COMPILED = path.resolve(import.meta.dirname, "..");   // dist/src
+app.use(express.static(path.resolve(COMPILED, "../../public")));
+app.use("/client", express.static(path.join(COMPILED, "client")));
+app.use("/shared", express.static(path.join(COMPILED, "shared")));
 
 // The top 10 players by wins (then fewest losses). Names and records only, never IDs.
-app.get('/leaderboard', (req, res) => {
+app.get("/leaderboard", (_req, res) => {
     try {
-        res.json(selectLeaderboard.all());
+        res.json(selectLeaderboard.all() as unknown as LeaderboardRow[]);
     } catch (err) {
-        console.error("Error reading leaderboard:", err.message);
+        console.error("Error reading leaderboard:", (err as Error).message);
         res.status(500).json({ error: "Could not load the leaderboard" });
     }
 });
-
-// Only start listening when run directly (npm start). The tests import this file and
-// start it on a random free port instead.
-const PORT = Number(process.env.PORT) || 3000;
-if (require.main === module) {
-    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-}
-
-module.exports = { server, wss, checkConnections };

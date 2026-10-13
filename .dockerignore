@@ -1,9 +1,9 @@
-# Keep the image to what the server needs at runtime
+# Keep the build context to what the image needs
 node_modules
+dist
 npm-debug.log*
 .git
 .github
-test
 *.db
 *.db-journal
 .env

@@ -4,9 +4,9 @@
 
 A web-based Tic-Tac-Toe game with three ways to play: local two-player, against an AI
 with four difficulty levels (one of them provably unbeatable), and real-time online play
-against another person, through quick match or a private room code. The frontend is
-vanilla HTML, CSS and JavaScript with no frameworks; the backend is a small Node server
-that runs the online matches over WebSockets and keeps a results leaderboard in SQLite.
+against another person, through quick match or a private room code. It is written in
+TypeScript with no frameworks: a plain HTML and CSS page in the browser, and a small Node
+server that runs the online matches over WebSockets and keeps a leaderboard in SQLite.
 Built as a personal project to dig into game AI and real-time multiplayer.
 
 **Play it live: [tictactoe-n3eh.onrender.com](https://tictactoe-n3eh.onrender.com)**
@@ -73,12 +73,12 @@ skips branches that cannot change the choice.
 ```mermaid
 flowchart LR
     subgraph Browser
-        UI["ticTacToe.js<br/>state + render()"]
-        Rules1["game.js<br/>rules + AI"]
+        UI["client/main.ts<br/>state + render()"]
+        Rules1["shared/game.ts<br/>rules + AI"]
     end
-    subgraph Server["Node server (server.js)"]
+    subgraph Server["Node server (server/app.ts)"]
         WS["WebSocket rooms<br/>validate every move"]
-        Rules2["game.js<br/>(same file)"]
+        Rules2["shared/game.ts<br/>(same file)"]
         HTTP["Express<br/>page + /leaderboard"]
         DB[("SQLite")]
     end
@@ -89,8 +89,14 @@ flowchart LR
     HTTP --> DB
 ```
 
-- **One set of rules.** `game.js` is pure logic (no page or network code). The browser,
-  the server and the tests all load the same file, so the rules exist in exactly one place.
+- **One set of rules.** `src/shared/game.ts` is pure logic (no page or network code). The
+  browser, the server and the tests all import the same module, so the rules exist in
+  exactly one place.
+- **One typed protocol.** Every WebSocket message is a type in `src/shared/protocol.ts`,
+  written as a union both sides import. The client's message handler switches on `type`,
+  and TypeScript narrows each case to that message's fields, so a misspelled message or a
+  missing field fails the build instead of failing silently in the browser. Messages
+  arriving at the server are still untrusted, so it checks every field at runtime too.
 - **One state object, one `render()`.** The client keeps everything the screen shows in a
   single `state` object; event handlers change it and call `render()`, which draws the
   board, status and buttons the same way in every mode.
@@ -133,37 +139,42 @@ flowchart LR
 
 ## Tech stack
 
-- Vanilla HTML, CSS and JavaScript on the frontend, no frameworks.
+- TypeScript in strict mode, compiled with `tsc` to native ES modules (no bundler): the
+  browser loads the compiled client directly, and Node runs the compiled server.
+- Plain HTML and CSS on the frontend, no frameworks.
 - Node.js with Express (page + HTTP API) and `ws` (WebSockets).
 - SQLite through Node's built-in `node:sqlite` module (no native add-on to compile).
-- `node:test` for unit and integration tests, ESLint, and GitHub Actions CI.
-- Docker, deployed on Render.
+- `node:test` for unit and integration tests, ESLint with `typescript-eslint`, and GitHub
+  Actions CI.
+- Docker (a build stage compiles, the runtime stage ships only the output), deployed on
+  Render.
 
 ## Project structure
 
-- `index.html`: page markup for every screen.
-- `styles.css`: all styling, including the per-mode colour themes and responsive layout.
-- `game.js`: the pure game rules, AI and player names, shared by the browser, the server
-  and the tests.
-- `ticTacToe.js`: the browser client: state, rendering, input and the WebSocket client.
-- `server.js`: the WebSocket and HTTP server, rooms and matchmaking, and the leaderboard.
-- `test/`: unit tests for the rules and AI, and integration tests against the real server.
-- `Dockerfile`: the production image used for the live demo.
+```
+public/          the page: index.html and styles.css
+src/shared/      game.ts (rules, AI, player names) and protocol.ts (message types),
+                 used by both the browser and the server
+src/client/      main.ts: the browser client (state, rendering, input, WebSocket client)
+src/server/      app.ts (WebSocket and HTTP server, rooms, leaderboard) and main.ts
+                 (starts it)
+test/            unit tests for the rules and AI, integration tests against the server
+dist/            the compiled output (made by npm run build, not committed)
+Dockerfile       the production image used for the live demo
+```
 
 ## Running
 
 Start the server (needs Node.js 22.13 or newer):
 
 ```bash
-npm install     # installs express, ws and cors (plus ESLint for development)
-npm start       # serves the game on http://localhost:3000 (set PORT to change it)
+npm install     # express and ws, plus TypeScript and ESLint for development
+npm start       # compiles, then serves the game on http://localhost:3000 (PORT changes it)
 ```
 
 Then open http://localhost:3000 in two browser tabs or on two machines and choose Play
 Online. The server hosts the page itself and the browser connects back to the same address,
 so the same build works locally and when deployed. It creates `tic_tac_toe.db` on first run.
-
-Offline and versus-AI play also work without a server: just open `index.html` in a browser.
 
 ## Deploying
 
@@ -181,8 +192,9 @@ served the page, over `wss://` on HTTPS, so no URLs need changing.
 ## Testing
 
 ```bash
-npm test        # 40 tests: rules and AI, plus server integration tests
+npm test        # compiles, then runs 40 tests: rules and AI, plus server integration tests
 npm run lint    # ESLint
+npm run build   # just compile (and type-check)
 ```
 
 Highlights:
@@ -197,7 +209,8 @@ Highlights:
   that records follow players across symbol swaps without ever exposing their IDs, and
   that only the game's own files are served.
 
-GitHub Actions runs linting, the tests and `npm audit` on Node 22 and 24 for every push.
+GitHub Actions runs linting, the type-check and build, the tests and `npm audit` on Node 22
+and 24 for every push.
 
 ## Notes
 

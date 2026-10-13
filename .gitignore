@@ -3,6 +3,9 @@ node_modules/
 npm-debug.log*
 yarn-error.log*
 
+# Compiled TypeScript (npm run build)
+dist/
+
 # SQLite database (generated at runtime by the server)
 *.db
 *.db-journal

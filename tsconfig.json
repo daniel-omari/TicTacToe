@@ -1,0 +1,21 @@
+{
+  // One compile for everything: the server, the browser client, the shared game code
+  // and the tests all go from src/ and test/ to dist/.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",            // ES modules with Node's rules (imports end in .js)
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "dist",
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "verbatimModuleSyntax": true,    // type-only imports must say "import type"
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src", "test"]
+}

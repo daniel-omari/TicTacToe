@@ -1,40 +1,52 @@
-"use strict";
 // Integration tests for the game server: a real server on a random free port, real
 // WebSocket clients, and a throwaway in-memory database.
 
-process.env.DB_PATH = ":memory:"; // must be set before server.js is loaded
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import crypto from "node:crypto";
+import type { AddressInfo } from "node:net";
+import WebSocket from "ws";
+import * as Game from "../src/shared/game.js";
+import type { Mark } from "../src/shared/game.js";
+import type { LeaderboardRow, ServerMessage } from "../src/shared/protocol.js";
 
-const { test, before, after } = require("node:test");
-const assert = require("node:assert/strict");
-const crypto = require("crypto");
-const WebSocket = require("ws");
-const { server, wss, checkConnections } = require("../server.js");
-const Game = require("../game.js");
+// Must be set before the server module loads, so it is imported dynamically below
+process.env.DB_PATH = ":memory:";
+const { server, wss, checkConnections } = await import("../src/server/app.js");
 
-let baseUrl;
+let baseUrl = "";
 
-before(() => new Promise((resolve) => {
+before(() => new Promise<void>((resolve) => {
     server.listen(0, () => {
-        baseUrl = `localhost:${server.address().port}`;
+        baseUrl = `localhost:${(server.address() as AddressInfo).port}`;
         resolve();
     });
 }));
 
-after(() => new Promise((resolve) => {
+after(() => new Promise<void>((resolve) => {
     wss.clients.forEach((client) => client.terminate());
     wss.close();
     server.close(() => resolve());
 }));
 
-// A connected test player that records everything the server sends it
-function connect(options) {
+type MessageType = ServerMessage["type"];
+type MessageOf<T extends MessageType> = Extract<ServerMessage, { type: T }>;
+
+// A test player: a real WebSocket client that records everything the server sends it
+interface TestPlayer extends WebSocket {
+    messages: ServerMessage[];
+    waiters: { type: MessageType; resolve: (message: ServerMessage) => void }[];
+    symbol: Mark | null;
+}
+
+function connect(options?: WebSocket.ClientOptions): Promise<TestPlayer> {
     return new Promise((resolve, reject) => {
-        const ws = new WebSocket(`ws://${baseUrl}`, options);
+        const ws = new WebSocket(`ws://${baseUrl}`, options) as TestPlayer;
         ws.messages = [];
         ws.waiters = [];
         ws.symbol = null;
         ws.on("message", (raw) => {
-            const message = JSON.parse(raw);
+            const message = JSON.parse(String(raw)) as ServerMessage;
             if (message.type === "assign") ws.symbol = message.symbol;
             ws.messages.push(message);
             ws.waiters = ws.waiters.filter((waiter) => {
@@ -49,18 +61,26 @@ function connect(options) {
 }
 
 // Resolve with the next message of `type` (call BEFORE triggering it)
-function next(ws, type) {
+function next<T extends MessageType>(ws: TestPlayer, type: T): Promise<MessageOf<T>> {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(`timed out waiting for "${type}"`)), 2000);
-        ws.waiters.push({ type, resolve: (message) => { clearTimeout(timer); resolve(message); } });
+        ws.waiters.push({
+            type,
+            resolve: (message) => {
+                clearTimeout(timer);
+                resolve(message as MessageOf<T>);
+            },
+        });
     });
 }
 
-const send = (ws, payload) => ws.send(typeof payload === "string" ? payload : JSON.stringify(payload));
+// Send anything, including deliberately broken messages
+const send = (ws: WebSocket, payload: unknown) =>
+    ws.send(typeof payload === "string" ? payload : JSON.stringify(payload));
 const pause = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Assert that `action` produces no message of `type` for `ws`
-async function expectNo(ws, type, action) {
+async function expectNo(ws: TestPlayer, type: MessageType, action: () => unknown): Promise<void> {
     const before = ws.messages.length;
     await action();
     await pause();
@@ -71,7 +91,7 @@ async function expectNo(ws, type, action) {
 const newPlayerId = () => crypto.randomBytes(16).toString("hex");
 
 // A player who has created a private room. Resolves with [player, code].
-async function createRoom(playerId = newPlayerId()) {
+async function createRoom(playerId: string = newPlayerId()): Promise<[TestPlayer, string]> {
     const player = await connect();
     const room = next(player, "room");
     const waiting = next(player, "waiting");
@@ -82,7 +102,9 @@ async function createRoom(playerId = newPlayerId()) {
 }
 
 // Two players in a fresh private room, game started. Returns [x, o, code, startMessage].
-async function startGame(firstId = newPlayerId(), secondId = newPlayerId()) {
+async function startGame(
+    firstId: string = newPlayerId(), secondId: string = newPlayerId(),
+): Promise<[TestPlayer, TestPlayer, string, MessageOf<"start">]> {
     const [first, code] = await createRoom(firstId);
     const second = await connect();
     const started = Promise.all([next(first, "start"), next(second, "start")]);
@@ -92,7 +114,7 @@ async function startGame(firstId = newPlayerId(), secondId = newPlayerId()) {
 }
 
 // Play X to a win along the top row
-async function xWins(x, o) {
+async function xWins(x: TestPlayer, o: TestPlayer) {
     await move(x, o, 0); await move(o, x, 3);
     await move(x, o, 1); await move(o, x, 4);
     const over = next(o, "game_over");
@@ -100,10 +122,11 @@ async function xWins(x, o) {
     return over;
 }
 
-const leaderboard = async () => (await fetch(`http://${baseUrl}/leaderboard`)).json();
+const leaderboard = async () =>
+    (await (await fetch(`http://${baseUrl}/leaderboard`)).json()) as LeaderboardRow[];
 
 // Make a move and wait for the opponent to see the resulting board
-async function move(player, opponent, index) {
+async function move(player: TestPlayer, opponent: TestPlayer, index: number) {
     const update = next(opponent, "update");
     send(player, { type: "move", index });
     return update;
@@ -307,6 +330,7 @@ test("a record follows the player across symbols, and the leaderboard sorts by w
     const rows = await leaderboard();
     const a = rows.find((row) => row.name === Game.playerName(aId));
     const b = rows.find((row) => row.name === Game.playerName(bId));
+    assert.ok(a && b, "both players are on the leaderboard");
     assert.deepEqual([a.wins, a.losses, b.wins, b.losses], [1, 1, 1, 1]);
     for (let i = 1; i < rows.length; i++) assert.ok(rows[i - 1].wins >= rows[i].wins);
     x.close(); o.close();
@@ -331,10 +355,16 @@ test("the server hosts the game page, and nothing else from the project folder",
     assert.equal(page.status, 200);
     assert.match(await page.text(), /<title>Tic-Tac-Toe<\/title>/);
 
-    for (const file of ["game.js", "ticTacToe.js", "styles.css"]) {
+    // The page, its stylesheet and the compiled browser code
+    for (const file of ["index.html", "styles.css", "client/main.js", "shared/game.js"]) {
         assert.equal((await fetch(`http://${baseUrl}/${file}`)).status, 200, file);
     }
-    for (const file of ["server.js", "package.json", "tic_tac_toe.db", ".gitignore", "test/server.test.js"]) {
+    // Never the server code, its sources, tests, the database or project files
+    const privateFiles = [
+        "server/app.js", "src/server/app.ts", "dist/src/server/app.js", "test/server.test.ts",
+        "package.json", "tsconfig.json", "tic_tac_toe.db", ".gitignore", "../package.json",
+    ];
+    for (const file of privateFiles) {
         assert.equal((await fetch(`http://${baseUrl}/${file}`)).status, 404, file);
     }
 });
