@@ -9,8 +9,8 @@
 <body>
     <!-- Game mode selection UI-->
     <div id="menu-screen">
-        <h1 id="title">Tic-Tac-Toe</h1>
-        <p>Select a game mode:</p>
+        <h1 class="glow-title" data-text="Tic-Tac-Toe">Tic-Tac-Toe</h1>
+        <p class="screen-subtitle">Select a game mode:</p>
         <button class="menu-button" id="ai">Play VS AI</button>
         <button class="menu-button" id="online">Play Online</button>
         <button class="menu-button" id="offline">Play Offline</button>
@@ -19,48 +19,77 @@
 
     <!-- AI difficulty selection-->
     <div id="ai-mode-selection" style="display: none;">
-        <button class="menu-button" id="aiEasy">Naive</button>
-        <button class="menu-button" id="aiMedium">Intermediate</button>
-        <button class="menu-button" id="aiHard">Advanced</button>
+        <h2 class="glow-title" data-text="Play VS AI">Play VS AI</h2>
+        <p class="screen-subtitle">Choose a difficulty:</p>
+        <button class="menu-button" id="aiNaive" data-difficulty="naive">Naive <span class="hint">Often misses the best move</span></button>
+        <button class="menu-button" id="aiIntermediate" data-difficulty="intermediate">Intermediate <span class="hint">Takes wins, usually blocks</span></button>
+        <button class="menu-button" id="aiAdvanced" data-difficulty="advanced">Advanced <span class="hint">Strong, but sometimes misses a fork</span></button>
+        <button class="menu-button" id="aiUnbeatable" data-difficulty="unbeatable">Unbeatable <span class="hint">Never loses</span></button>
+        <button class="back-button" id="aiBack">Back</button>
+    </div>
+
+    <!-- Online: how to find an opponent -->
+    <div id="online-mode-selection" style="display: none;">
+        <h2 class="glow-title" data-text="Play Online">Play Online</h2>
+        <p class="screen-subtitle">Find an opponent:</p>
+        <p id="onlineName" class="player-name"></p>
+        <button class="menu-button" id="quickMatch">Quick Match <span class="hint">Play the next person who's looking</span></button>
+        <button class="menu-button" id="createRoom">Private Room <span class="hint">Get a code to share with a friend</span></button>
+        <form id="joinForm" class="join-form">
+            <label for="roomCode">Have a code?</label>
+            <div class="join-row">
+                <input id="roomCode" name="roomCode" type="text" maxlength="5" autocomplete="off"
+                       autocapitalize="characters" spellcheck="false" placeholder="ABCDE">
+                <button type="submit" id="joinRoom">Join</button>
+            </div>
+            <p id="onlineError" class="form-error" role="alert"></p>
+        </form>
+        <button class="back-button" id="onlineBack">Back</button>
     </div>
 
     <!-- PVP and Offline game -->
     <div class="game-container" id="game-container" style="display: none;">
-        <h1 id="title">Tic-Tac-Toe</h1>
+        <h1 class="glow-title" data-text="Tic-Tac-Toe">Tic-Tac-Toe</h1>
         <p class="about">Tic-Tac-Toe is a classic game of strategy played on a 3x3 grid. The goal is to align three symbols in a row, either horizontally, vertically, or diagonally.</p>
         <div class="board" role="grid" aria-label="Tic-Tac-Toe board">
             <div class="row" role="row">
-                <button class="square" id="0" role="gridcell" aria-label="Empty cell" tabindex="0"></button>
-                <button class="square" id="1" role="gridcell" aria-label="Empty cell" tabindex="1"></button>
-                <button class="square" id="2" role="gridcell" aria-label="Empty cell" tabindex="2"></button>
+                <button class="square" id="0" role="gridcell" aria-label="Empty cell"></button>
+                <button class="square" id="1" role="gridcell" aria-label="Empty cell"></button>
+                <button class="square" id="2" role="gridcell" aria-label="Empty cell"></button>
             </div>
             <div class="row" role="row">
-                <button class="square" id="3" role="gridcell" aria-label="Empty cell" tabindex="3"></button>
-                <button class="square" id="4" role="gridcell" aria-label="Empty cell" tabindex="4"></button>
-                <button class="square" id="5" role="gridcell" aria-label="Empty cell" tabindex="5"></button>
+                <button class="square" id="3" role="gridcell" aria-label="Empty cell"></button>
+                <button class="square" id="4" role="gridcell" aria-label="Empty cell"></button>
+                <button class="square" id="5" role="gridcell" aria-label="Empty cell"></button>
             </div>
             <div class="row" role="row">
-                <button class="square" id="6" role="gridcell" aria-label="Empty cell" tabindex="6"></button>
-                <button class="square" id="7" role="gridcell" aria-label="Empty cell" tabindex="7"></button>
-                <button class="square" id="8" role="gridcell" aria-label="Empty cell" tabindex="8"></button>
+                <button class="square" id="6" role="gridcell" aria-label="Empty cell"></button>
+                <button class="square" id="7" role="gridcell" aria-label="Empty cell"></button>
+                <button class="square" id="8" role="gridcell" aria-label="Empty cell"></button>
             </div>
         </div>
 
         <div class="game-info">
             <p id="playerIndicator"></p>
-            <p id="status">Player X's turn</p>
+            <p id="status" aria-live="polite">Player X's turn</p>
             <button id="reset" aria-label="Reset game">Reset Game</button>
+            <button id="rematch" aria-label="Play again against the same opponent" hidden>Rematch</button>
+            <button id="menu" aria-label="Back to the main menu">Menu</button>
         </div>
         <div id="endGameMessage" style="display:none;"></div>
     </div>
 
     <!-- Leaderboard -->
-     <div id="leaderboard" style="display: none;">
-        <h2 id="ldTitle">Leaderboard</h2>
+    <div id="leaderboard" style="display: none;">
+        <h2 class="glow-title" data-text="Leaderboard">Leaderboard</h2>
+        <p class="screen-subtitle">Top online players (W = wins, L = losses, D = draws)</p>
         <ul id="leaderboardList" role="list" aria-live="polite"></ul>
-     </div>
+        <p id="leaderboardName" class="player-name"></p>
+        <button class="back-button" id="leaderboardBack">Back</button>
+    </div>
 
 
+    <script src="game.js"></script>
     <script src="ticTacToe.js"></script>
 </body>
 </html>
