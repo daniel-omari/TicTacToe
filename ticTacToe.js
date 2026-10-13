@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
         player1: "X",         // Player 1's symbol (in AI mode, the human). Swaps after every finished game.
         symbol: null,         // online only: the symbol the server gave us
         roomCode: null,       // online only: the private room's code, to show and share
+        opponentName: null,   // online only: the other player's generated name
         rematch: "hidden",    // online only: "hidden", "available" or "requested"
     };
 
@@ -25,6 +26,29 @@ document.addEventListener("DOMContentLoaded", () => {
     const SERVER_WS = servedFromFile
         ? "ws://localhost:3000"
         : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
+    // This browser's secret player ID. The public name is made from it (see playerName in
+    // game.js), and it is kept in localStorage so name and record survive reloads.
+    const playerId = loadPlayerId();
+    const myName = TicTacToeGame.playerName(playerId);
+
+    function loadPlayerId() {
+        const KEY = "tictactoe-player-id";
+        try {
+            const saved = localStorage.getItem(KEY);
+            if (TicTacToeGame.isPlayerId(saved)) return saved;
+        } catch {
+            // storage blocked (some private modes): a fresh ID for this visit is fine
+        }
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        const id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+        try {
+            localStorage.setItem(KEY, id);
+        } catch {
+            // as above
+        }
+        return id;
+    }
+
     let aiTimer = null; // pending AI move, so a reset or leaving the game can cancel it
     let ws = null;      // connection to the game server while in online mode
 
@@ -55,6 +79,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const roomCodeInput = document.getElementById("roomCode");
     const onlineError = document.getElementById("onlineError");
     const onlineBackButton = document.getElementById("onlineBack");
+    const onlineName = document.getElementById("onlineName");
+    const leaderboardName = document.getElementById("leaderboardName");
 
     // ---- Rendering ----
 
@@ -77,11 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
         statusText.textContent = statusMessage();
 
         endGameMessage.style.display = state.result ? "block" : "none";
-        if (state.result) {
-            endGameMessage.textContent = state.result.winner === "draw"
-                ? "It's a draw!"
-                : `Player ${state.result.winner} WINS!`;
-        }
+        if (state.result) endGameMessage.textContent = resultMessage(true);
 
         playerIndicator.textContent = playerMessage();
         resetButton.hidden = state.mode === "online"; // online games restart with Rematch instead
@@ -92,19 +114,42 @@ document.addEventListener("DOMContentLoaded", () => {
     // The line under the board: a one-off notice, the result, or whose turn it is
     function statusMessage() {
         if (state.notice) return state.notice;
-        if (state.result) {
-            return state.result.winner === "draw" ? "It's a draw!" : `Player ${state.result.winner} wins!`;
-        }
+        if (state.result) return resultMessage(false);
+        if (state.mode === "offline") return `${offlinePlayer(state.turn)}'s turn (${state.turn})`;
+        if (state.mode === "ai") return isMe(state.turn) ? "Your turn" : "The AI is thinking...";
+        if (state.mode === "online") return isMe(state.turn) ? "Your turn" : `${opponent()}'s turn`;
         return `Player ${state.turn}'s turn`;
     }
+
+    // Players swap symbols every game, so results name the player, not the symbol.
+    // shout = true gives the big banner version.
+    function resultMessage(shout) {
+        const { winner } = state.result;
+        if (winner === "draw") return "It's a draw!";
+        if (state.mode === "offline") {
+            const name = offlinePlayer(winner);
+            return shout ? `${name.toUpperCase()} WINS!` : `${name} wins!`;
+        }
+        if (isMe(winner)) return shout ? "YOU WIN!" : "You win!";
+        if (state.mode === "ai") return shout ? "AI WINS!" : "The AI wins!";
+        return shout ? "YOU LOSE!" : `${opponent()} wins!`;
+    }
+
+    // Offline, Player 1 holds state.player1's symbol this game
+    const offlinePlayer = (symbol) => (symbol === state.player1 ? "Player 1" : "Player 2");
+    // Whether a symbol belongs to the person at this screen (AI and online modes)
+    const isMe = (symbol) => symbol === (state.mode === "online" ? state.symbol : state.player1);
+    const opponent = () => state.opponentName || "Your opponent";
 
     // The line above the status: who is playing which symbol
     function playerMessage() {
         if (state.mode === "online") {
             if (!state.symbol) return "";
-            return state.roomCode
-                ? `You are player: ${state.symbol} (room ${state.roomCode})`
-                : `You are player: ${state.symbol}`;
+            const me = `You: ${myName} (${state.symbol})`;
+            if (state.opponentName) {
+                return `${me} vs ${state.opponentName} (${TicTacToeGame.otherSymbol(state.symbol)})`;
+            }
+            return state.roomCode ? `${me}, room ${state.roomCode}` : me;
         }
         if (state.mode === "ai") return `You are player: ${state.player1}`;
         if (state.mode === "offline") {
@@ -123,7 +168,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Colour theme for each mode (null = plain menu look)
     function applyTheme(theme) {
-        document.body.classList.remove("offline-theme", "ai-theme", "online-theme");
+        document.body.classList.remove("offline-theme", "ai-theme", "online-theme", "leaderboard-theme");
         if (theme) document.body.classList.add(`${theme}-theme`);
     }
 
@@ -259,6 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
         state.mode = null;
         state.symbol = null;
         state.roomCode = null;
+        state.opponentName = null;
         resetBoard(); // also cancels a pending AI move
         render();
     }
@@ -279,6 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
         state.mode = "online";
         state.symbol = null;
         state.roomCode = null;
+        state.opponentName = null;
         resetBoard();
         state.active = false; // no moves until an opponent joins
         state.notice = "Connecting...";
@@ -290,7 +337,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let connected = false;
         ws.onopen = () => {
             connected = true;
-            ws.send(JSON.stringify(request));
+            ws.send(JSON.stringify({ ...request, player: playerId }));
         };
 
         // Without this a dead or unreachable server would leave the page "searching" forever
@@ -334,6 +381,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 break;
             case "start": // first game or a rematch: begin from a clean board
                 resetBoard();
+                state.opponentName = data.players?.[TicTacToeGame.otherSymbol(state.symbol)] ?? null;
                 state.notice = state.symbol === "X"
                     ? "Game started! You go first."
                     : "Game started! Your opponent goes first.";
@@ -355,6 +403,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 break;
             case "opponent_left": // fresh board while we wait for someone new
                 resetBoard();
+                state.opponentName = null;
                 state.active = false;
                 state.notice = state.roomCode
                     ? `Your opponent left. Room code ${state.roomCode} is still open.`
@@ -379,8 +428,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ---- Leaderboard ----
 
-    // Show the screen, then fill it with the online results from the server
+    // Show the screen, then fill it with the top players from the server
     function displayLeaderboard() {
+        applyTheme("leaderboard");
         menuScreen.style.display = "none";
         leaderboardScreen.style.display = "flex";
         leaderboardScreen.setAttribute("tabindex", "-1"); // focusable from script only
@@ -391,14 +441,14 @@ document.addEventListener("DOMContentLoaded", () => {
             .then((rows) => {
                 leaderboardList.replaceChildren();
                 if (rows.length === 0) {
-                    addLeaderboardRow("No online games played yet", "");
+                    addLeaderboardRow("No ranked games yet", "");
                     return;
                 }
-                rows.filter((row) => row.winner !== "draw").forEach((row) => {
-                    addLeaderboardRow(`Player ${row.winner}`, `${row.wins} ${row.wins === 1 ? "win" : "wins"}`);
+                rows.forEach((row, i) => {
+                    const mine = row.name === myName;
+                    const label = `${i + 1}. ${row.name}${mine ? " (you)" : ""}`;
+                    addLeaderboardRow(label, `${row.wins}W ${row.losses}L ${row.draws}D`, mine);
                 });
-                const draws = rows.find((row) => row.winner === "draw");
-                if (draws) addLeaderboardRow("Draws", String(draws.wins));
             })
             .catch((error) => {
                 console.error("Error fetching leaderboard:", error);
@@ -408,15 +458,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // One leaderboard line: a label on the left and a value on the right
-    function addLeaderboardRow(label, value) {
+    function addLeaderboardRow(label, value, mine = false) {
         const item = document.createElement("li");
         const labelSpan = document.createElement("span");
         const valueSpan = document.createElement("span");
         labelSpan.textContent = label;
         valueSpan.textContent = value;
         item.append(labelSpan, valueSpan);
+        if (mine) item.classList.add("you");
         leaderboardList.appendChild(item);
     }
+
+    // Your generated name, shown on the online and leaderboard screens
+    function showMyName(element, before) {
+        const strong = document.createElement("strong");
+        strong.textContent = myName;
+        element.replaceChildren(before, strong);
+    }
+    showMyName(onlineName, "You'll play as ");
+    showMyName(leaderboardName, "You play online as ");
 
     // ---- Event listeners (attached once) ----
     squares.forEach((square, index) => {

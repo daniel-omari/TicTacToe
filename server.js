@@ -22,15 +22,27 @@ app.use(cors());
 // Game results live in SQLite via Node's built-in driver (no native add-on to build).
 // DB_PATH lets the tests use a throwaway in-memory database (":memory:").
 const db = new DatabaseSync(process.env.DB_PATH || 'tic_tac_toe.db');
-db.exec(`CREATE TABLE IF NOT EXISTS game_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    winner TEXT NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+// One row per player (by their secret browser ID), with their online record. The ID
+// itself is never sent to anyone; the leaderboard shows only the name made from it.
+db.exec(`CREATE TABLE IF NOT EXISTS players (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    wins INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    draws INTEGER NOT NULL DEFAULT 0
 )`);
-const insertResult = db.prepare("INSERT INTO game_results (winner) VALUES (?)");
-const selectLeaderboard = db.prepare(
-    "SELECT winner, COUNT(*) AS wins FROM game_results GROUP BY winner ORDER BY wins DESC"
-);
+const recordResult = db.prepare(`
+    INSERT INTO players (id, name, wins, losses, draws) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+        wins = wins + excluded.wins,
+        losses = losses + excluded.losses,
+        draws = draws + excluded.draws
+`);
+const selectLeaderboard = db.prepare(`
+    SELECT name, wins, losses, draws FROM players
+    ORDER BY wins DESC, losses ASC, draws DESC, name ASC
+    LIMIT 10
+`);
 
 // Every room by its code. Private rooms are joined by typing the code; quick-match
 // rooms are public and pair up strangers (their code is never shown).
@@ -88,12 +100,42 @@ function addPlayer(ws, room) {
         safeSend(ws, { type: "waiting" });
         return;
     }
-    room.players.forEach((player) => safeSend(player, { type: "start" }));
+    startGame(room);
+}
+
+// Tell both players the game is on, and who is playing which symbol.
+function startGame(room) {
+    const names = {};
+    room.players.forEach((player) => {
+        names[player.symbol] = player.playerName;
+    });
+    room.players.forEach((player) => safeSend(player, { type: "start", players: names }));
+}
+
+// Add a finished game to both players' records. Guests, and games where both seats
+// belong to the same browser (two tabs), don't count.
+function saveResult(room, winner) {
+    const [a, b] = room.players;
+    if (!a.playerId || !b.playerId || a.playerId === b.playerId) return;
+    for (const player of room.players) {
+        const won = winner === player.symbol ? 1 : 0;
+        const lost = winner !== "draw" && winner !== player.symbol ? 1 : 0;
+        const drew = winner === "draw" ? 1 : 0;
+        recordResult.run(player.playerId, player.playerName, won, lost, drew);
+    }
+}
+
+// Who this connection is: the browser's secret ID from the request, if it sent a valid
+// one. Players without one can still play, as "Guest", but their games aren't ranked.
+function identify(ws, data) {
+    ws.playerId = TicTacToeGame.isPlayerId(data.player) ? data.player : null;
+    ws.playerName = TicTacToeGame.playerName(ws.playerId);
 }
 
 // "create": open a private room and tell the creator its code to share.
-function handleCreate(ws) {
+function handleCreate(ws, data) {
     if (ws.room) return; // one room per connection
+    identify(ws, data);
     const room = createRoom(true);
     safeSend(ws, { type: "room", code: room.code });
     addPlayer(ws, room);
@@ -102,6 +144,7 @@ function handleCreate(ws) {
 // "join": take the free seat in a private room, by its code.
 function handleJoin(ws, data) {
     if (ws.room) return;
+    identify(ws, data);
     const code = typeof data.code === "string" ? data.code.trim().toUpperCase() : "";
     const room = rooms.get(code);
     if (!room || !room.isPrivate) {
@@ -117,8 +160,9 @@ function handleJoin(ws, data) {
 }
 
 // "quick": pair with whoever has been waiting longest, or wait for the next player.
-function handleQuickMatch(ws) {
+function handleQuickMatch(ws, data) {
     if (ws.room) return;
+    identify(ws, data);
     let room = [...rooms.values()].find((r) => !r.isPrivate && r.players.length === 1);
     if (!room) room = createRoom(false);
     addPlayer(ws, room);
@@ -151,7 +195,7 @@ function handleMove(ws, data) {
 
         // Store the result in the database
         try {
-            insertResult.run(winner);
+            saveResult(room, winner);
         } catch (err) {
             console.error("Error saving game result:", err.message);
         }
@@ -201,8 +245,8 @@ function handleRematch(ws) {
     room.players.forEach((player) => {
         player.symbol = player.symbol === "X" ? "O" : "X";
         safeSend(player, { type: "assign", symbol: player.symbol });
-        safeSend(player, { type: "start" });
     });
+    startGame(room);
 }
 
 // Ping every player regularly. Hosting proxies close connections that sit idle, and a
@@ -246,9 +290,9 @@ wss.on('connection', (ws) => {
         if (!data || typeof data !== 'object') return;
 
         try {
-            if (data.type === 'create') handleCreate(ws);
+            if (data.type === 'create') handleCreate(ws, data);
             if (data.type === 'join') handleJoin(ws, data);
-            if (data.type === 'quick') handleQuickMatch(ws);
+            if (data.type === 'quick') handleQuickMatch(ws, data);
             if (data.type === 'move') handleMove(ws, data);
             if (data.type === 'rematch') handleRematch(ws);
         } catch (err) {
@@ -285,7 +329,7 @@ PUBLIC_FILES.forEach((file) => {
     app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
 });
 
-// Win tally per symbol (X, O and draws).
+// The top 10 players by wins (then fewest losses). Names and records only, never IDs.
 app.get('/leaderboard', (req, res) => {
     try {
         res.json(selectLeaderboard.all());

@@ -6,8 +6,10 @@ process.env.DB_PATH = ":memory:"; // must be set before server.js is loaded
 
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
+const crypto = require("crypto");
 const WebSocket = require("ws");
 const { server, wss, checkConnections } = require("../server.js");
+const Game = require("../game.js");
 
 let baseUrl;
 
@@ -65,26 +67,40 @@ async function expectNo(ws, type, action) {
     assert.ok(!ws.messages.slice(before).some((m) => m.type === type), `unexpected "${type}"`);
 }
 
+// A fresh browser ID, like the one each real browser keeps
+const newPlayerId = () => crypto.randomBytes(16).toString("hex");
+
 // A player who has created a private room. Resolves with [player, code].
-async function createRoom() {
+async function createRoom(playerId = newPlayerId()) {
     const player = await connect();
     const room = next(player, "room");
     const waiting = next(player, "waiting");
-    send(player, { type: "create" });
+    send(player, { type: "create", player: playerId });
     const { code } = await room;
     await waiting;
     return [player, code];
 }
 
-// Two players in a fresh private room, game started. Returns [x, o, code].
-async function startGame() {
-    const [first, code] = await createRoom();
+// Two players in a fresh private room, game started. Returns [x, o, code, startMessage].
+async function startGame(firstId = newPlayerId(), secondId = newPlayerId()) {
+    const [first, code] = await createRoom(firstId);
     const second = await connect();
     const started = Promise.all([next(first, "start"), next(second, "start")]);
-    send(second, { type: "join", code });
-    await started;
-    return first.symbol === "X" ? [first, second, code] : [second, first, code];
+    send(second, { type: "join", code, player: secondId });
+    const [start] = await started;
+    return first.symbol === "X" ? [first, second, code, start] : [second, first, code, start];
 }
+
+// Play X to a win along the top row
+async function xWins(x, o) {
+    await move(x, o, 0); await move(o, x, 3);
+    await move(x, o, 1); await move(o, x, 4);
+    const over = next(o, "game_over");
+    send(x, { type: "move", index: 2 });
+    return over;
+}
+
+const leaderboard = async () => (await fetch(`http://${baseUrl}/leaderboard`)).json();
 
 // Make a move and wait for the opponent to see the resulting board
 async function move(player, opponent, index) {
@@ -257,19 +273,57 @@ test("a rematch starts once both players ask, with symbols swapped", async () =>
     x.close(); o.close();
 });
 
-test("the leaderboard endpoint returns the recorded results", async () => {
-    const [x, o] = await startGame();
-    await move(x, o, 0); await move(o, x, 3);
-    await move(x, o, 1); await move(o, x, 4);
-    const over = next(o, "game_over");
-    send(x, { type: "move", index: 2 });
-    await over;
-
-    const response = await fetch(`http://${baseUrl}/leaderboard`);
-    assert.equal(response.status, 200);
-    const rows = await response.json();
-    assert.ok(rows.some((row) => row.winner === "X" && row.wins >= 1));
+test("both players are told each other's generated names when the game starts", async () => {
+    const xId = newPlayerId(), oId = newPlayerId();
+    const [x, o, , start] = await startGame(xId, oId);
+    assert.deepEqual(start.players, { X: Game.playerName(xId), O: Game.playerName(oId) });
     x.close(); o.close();
+});
+
+test("the leaderboard ranks players by name and record, and never reveals their IDs", async () => {
+    const winnerId = newPlayerId(), loserId = newPlayerId();
+    const [x, o] = await startGame(winnerId, loserId);
+    assert.equal((await xWins(x, o)).winner, "X");
+
+    const rows = await leaderboard();
+    const winner = rows.find((row) => row.name === Game.playerName(winnerId));
+    const loser = rows.find((row) => row.name === Game.playerName(loserId));
+    assert.deepEqual(winner, { name: Game.playerName(winnerId), wins: 1, losses: 0, draws: 0 });
+    assert.deepEqual(loser, { name: Game.playerName(loserId), wins: 0, losses: 1, draws: 0 });
+    assert.ok(!JSON.stringify(rows).includes(winnerId), "IDs stay private");
+    x.close(); o.close();
+});
+
+test("a record follows the player across symbols, and the leaderboard sorts by wins", async () => {
+    const aId = newPlayerId(), bId = newPlayerId();
+    let [x, o] = await startGame(aId, bId);               // a is X
+    await xWins(x, o);
+    const restarted = Promise.all([next(x, "start"), next(o, "start")]);
+    send(x, { type: "rematch" }); send(o, { type: "rematch" });
+    await restarted;
+    [x, o] = [o, x];                                      // symbols swapped: b is X now
+    await xWins(x, o);                                    // so b wins this one
+
+    const rows = await leaderboard();
+    const a = rows.find((row) => row.name === Game.playerName(aId));
+    const b = rows.find((row) => row.name === Game.playerName(bId));
+    assert.deepEqual([a.wins, a.losses, b.wins, b.losses], [1, 1, 1, 1]);
+    for (let i = 1; i < rows.length; i++) assert.ok(rows[i - 1].wins >= rows[i].wins);
+    x.close(); o.close();
+});
+
+test("guests and two tabs of the same browser are not ranked", async () => {
+    const sameId = newPlayerId();
+    const [x, o] = await startGame(sameId, sameId);        // one browser playing itself
+    await xWins(x, o);
+    assert.ok(!(await leaderboard()).some((row) => row.name === Game.playerName(sameId)));
+    x.close(); o.close();
+
+    const [gx, go, , start] = await startGame("not-a-valid-id", newPlayerId());
+    assert.equal(start.players.X, "Guest");
+    await xWins(gx, go);
+    assert.ok(!(await leaderboard()).some((row) => row.name === "Guest"));
+    gx.close(); go.close();
 });
 
 test("the server hosts the game page, and nothing else from the project folder", async () => {

@@ -183,3 +183,13 @@ test("unbeatable never loses as O, in any possible game", () => {
 test("unbeatable never loses as X, in any possible game", () => {
     assert.ok(countGamesWhereAiNeverLoses("X") > 0);
 });
+
+test("player names are made from the browser ID, and anything else is a guest", () => {
+    const id = "00010200000000000000000000000000";
+    assert.equal(Game.playerName(id), "Swift Falcon 12");     // bytes 00, 01, 02
+    assert.equal(Game.playerName(id), Game.playerName(id));   // always the same name
+    assert.match(Game.playerName("ffffff" + "0".repeat(26)), /^[A-Z][a-z]+ [A-Z][a-z]+ \d{2}$/);
+    for (const bad of [undefined, null, 42, "", "xyz", "A".repeat(32), id + "0"]) {
+        assert.equal(Game.playerName(bad), "Guest");
+    }
+});

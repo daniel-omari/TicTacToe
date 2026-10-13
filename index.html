@@ -32,6 +32,7 @@
     <div id="online-mode-selection" style="display: none;">
         <h2 class="glow-title" data-text="Play Online">Play Online</h2>
         <p class="screen-subtitle">Find an opponent:</p>
+        <p id="onlineName" class="player-name"></p>
         <button class="menu-button" id="quickMatch">Quick Match <span class="hint">Play the next person who's looking</span></button>
         <button class="menu-button" id="createRoom">Private Room <span class="hint">Get a code to share with a friend</span></button>
         <form id="joinForm" class="join-form">
@@ -81,8 +82,9 @@
     <!-- Leaderboard -->
     <div id="leaderboard" style="display: none;">
         <h2 class="glow-title" data-text="Leaderboard">Leaderboard</h2>
-        <p class="screen-subtitle">Online results by symbol</p>
+        <p class="screen-subtitle">Top online players (W = wins, L = losses, D = draws)</p>
         <ul id="leaderboardList" role="list" aria-live="polite"></ul>
+        <p id="leaderboardName" class="player-name"></p>
         <button class="back-button" id="leaderboardBack">Back</button>
     </div>
 

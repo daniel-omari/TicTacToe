@@ -1,6 +1,6 @@
 "use strict";
-// Pure Tic-Tac-Toe rules and AI, shared by the browser client, the Node server and the
-// tests. Nothing here touches the page or the network, so every function can be unit
+// Pure Tic-Tac-Toe rules, AI and player names, shared by the browser client, the Node
+// server and the tests. Nothing here touches the page or the network, so every function can be unit
 // tested on its own. The board is an array of 9 cells in reading order (0-8), each "",
 // "X" or "O". Browsers load this with a plain <script> tag (it works straight from
 // file://); Node loads it with require().
@@ -167,6 +167,35 @@ const TicTacToeGame = (() => {
         return pick(strongSquares(bestMoves(board, aiSymbol)), rng);
     }
 
+    // ---- Player names for the online leaderboard ----
+    // Every browser keeps a random secret ID (32 hex characters). The public name is made
+    // from that ID, so names are friendly, never typed in by players (nothing to moderate)
+    // and stay the same for as long as the browser keeps its ID.
+    const NAME_ADJECTIVES = Object.freeze([
+        "Swift", "Calm", "Bold", "Clever", "Brave", "Lucky", "Quiet", "Sly",
+        "Sunny", "Witty", "Eager", "Gentle", "Jolly", "Keen", "Mighty", "Nimble",
+        "Proud", "Rapid", "Silent", "Steady", "Bright", "Cosmic", "Daring", "Fierce",
+        "Golden", "Happy", "Icy", "Loyal", "Noble", "Rusty", "Sneaky", "Wild",
+    ]);
+    const NAME_ANIMALS = Object.freeze([
+        "Otter", "Falcon", "Panda", "Fox", "Tiger", "Koala", "Badger", "Raven",
+        "Wolf", "Lynx", "Moose", "Gecko", "Heron", "Bison", "Cobra", "Dingo",
+        "Eagle", "Ferret", "Hippo", "Ibis", "Jaguar", "Lemur", "Marten", "Newt",
+        "Owl", "Puffin", "Quokka", "Rhino", "Seal", "Toucan", "Walrus", "Yak",
+    ]);
+    const PLAYER_ID_PATTERN = /^[0-9a-f]{32}$/;
+
+    const isPlayerId = (id) => typeof id === "string" && PLAYER_ID_PATTERN.test(id);
+
+    // "Swift Otter 42" for an ID; the first three bytes pick the words and the number
+    function playerName(id) {
+        if (!isPlayerId(id)) return "Guest";
+        const byte = (i) => parseInt(id.slice(i * 2, i * 2 + 2), 16);
+        const adjective = NAME_ADJECTIVES[byte(0) % NAME_ADJECTIVES.length];
+        const animal = NAME_ANIMALS[byte(1) % NAME_ANIMALS.length];
+        return `${adjective} ${animal} ${10 + (byte(2) % 90)}`;
+    }
+
     return Object.freeze({
         WINNING_LINES,
         otherSymbol,
@@ -179,6 +208,8 @@ const TicTacToeGame = (() => {
         winningMoves,
         DIFFICULTIES,
         aiMove,
+        isPlayerId,
+        playerName,
     });
 })();
 
